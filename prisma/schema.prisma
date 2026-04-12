@@ -1,0 +1,111 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String     @id @default(cuid())
+  email            String     @unique
+  password         String
+  name             String?
+  avatarUrl        String?
+  avatarPublicId   String?
+  role             Role       @default(USER)
+  status           UserStatus @default(ACTIVE)
+  emailVerified    DateTime?
+  verifyToken      String?
+  resetToken       String?
+  resetTokenExpiry DateTime?
+  pendingEmail       String?
+  emailChangeToken   String?
+  emailChangeExpiry  DateTime?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  createdBy        String?
+  timeline         TimelineEntry[]
+  impersonationLogsAsAdmin ImpersonationLog[] @relation("AdminImpersonations")
+  impersonationLogsAsTarget ImpersonationLog[] @relation("UserImpersonated")
+}
+
+model TimelineEntry {
+  id          String      @id @default(cuid())
+  userId      String
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  entryDate   DateTime
+  publishAt   DateTime?
+  status      EntryStatus @default(DRAFT)
+  assets      Asset[]
+  editedByAdmin Boolean   @default(false)
+  editedByAdminAt DateTime?
+  editedByAdminId String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+model Asset {
+  id              String        @id @default(cuid())
+  timelineEntryId String
+  timelineEntry   TimelineEntry @relation(fields: [timelineEntryId], references: [id], onDelete: Cascade)
+  url             String
+  publicId        String
+  type            AssetType
+  filename        String
+  size            Int?
+  createdAt       DateTime      @default(now())
+}
+
+model AppSettings {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt @default(now())
+}
+
+model EmailTemplate {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  subject   String
+  htmlBody  String   @db.Text
+  variables String
+  updatedAt DateTime @updatedAt @default(now())
+  updatedBy String?
+}
+
+model ImpersonationLog {
+  id        String   @id @default(cuid())
+  adminId   String
+  userId    String
+  createdAt DateTime @default(now())
+  admin     User     @relation("AdminImpersonations", fields: [adminId], references: [id], onDelete: Cascade)
+  target    User     @relation("UserImpersonated", fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  USER
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum EntryStatus {
+  DRAFT
+  PUBLISHED
+  SCHEDULED
+}
+
+enum AssetType {
+  IMAGE
+  VIDEO
+  AUDIO
+  PDF
+}
