@@ -3,24 +3,24 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import {
-  ArrowLeft,
-  LayoutDashboard,
-  Mail,
-  PanelLeft,
-  PanelLeftClose,
-  Settings,
-  Sparkles,
-  Users,
-} from "lucide-react";
 import { AdminMobileNav } from "@/components/sup-admin/AdminMobileNav";
+import {
+  IconBackApp,
+  IconConsole,
+  IconEmailTemplates,
+  IconOverview,
+  IconPanelCollapse,
+  IconPanelExpand,
+  IconSettingsNav,
+  IconUsersNav,
+} from "@/components/sup-admin/AdminNavIcons";
 import { cn } from "@/lib/utils";
 
 const NAV = [
-  { href: "/sup-admin", label: "Overview", icon: LayoutDashboard },
-  { href: "/sup-admin/users", label: "Users", icon: Users },
-  { href: "/sup-admin/email-templates", label: "Email Templates", icon: Mail },
-  { href: "/sup-admin/settings", label: "Settings", icon: Settings },
+  { href: "/sup-admin", label: "Overview", icon: IconOverview },
+  { href: "/sup-admin/users", label: "Users", icon: IconUsersNav },
+  { href: "/sup-admin/email-templates", label: "Email Templates", icon: IconEmailTemplates },
+  { href: "/sup-admin/settings", label: "Settings", icon: IconSettingsNav },
 ] as const;
 
 const STORAGE_KEY = "fgo-admin-sidebar-collapsed";
@@ -123,7 +123,7 @@ export function AdminLayoutClient({
                 className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-navy/5"
                 title="Console"
               >
-                <Sparkles className="h-5 w-5 text-navy" aria-hidden />
+                <IconConsole className="h-5 w-5 text-navy" />
               </div>
             }
 
@@ -158,7 +158,7 @@ export function AdminLayoutClient({
                 collapsed ? "justify-center px-0 py-2.5" : "px-3 py-2.5"
               )}
             >
-              <ArrowLeft className="h-5 w-5 shrink-0" />
+              <IconBackApp className="h-5 w-5 shrink-0 text-accent" title="Back to app" />
               {!collapsed ?
                 <span>Back to app</span>
               : null}
@@ -173,9 +173,9 @@ export function AdminLayoutClient({
               )}
             >
               {collapsed ?
-                <PanelLeft className="h-4 w-4 shrink-0" />
+                <IconPanelExpand className="h-4 w-4 shrink-0" />
               : <>
-                  <PanelLeftClose className="h-4 w-4 shrink-0" />
+                  <IconPanelCollapse className="h-4 w-4 shrink-0" />
                   <span>Collapse</span>
                 </>
               }

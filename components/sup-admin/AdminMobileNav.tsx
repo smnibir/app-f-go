@@ -4,20 +4,20 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import {
-  ArrowLeft,
-  LayoutDashboard,
-  Mail,
-  Menu,
-  Settings,
-  Users,
-  X,
-} from "lucide-react";
+  IconBackApp,
+  IconClose,
+  IconEmailTemplates,
+  IconMenu,
+  IconOverview,
+  IconSettingsNav,
+  IconUsersNav,
+} from "@/components/sup-admin/AdminNavIcons";
 
 const nav = [
-  { href: "/sup-admin", label: "Overview", icon: LayoutDashboard },
-  { href: "/sup-admin/users", label: "Users", icon: Users },
-  { href: "/sup-admin/email-templates", label: "Email Templates", icon: Mail },
-  { href: "/sup-admin/settings", label: "Settings", icon: Settings },
+  { href: "/sup-admin", label: "Overview", icon: IconOverview },
+  { href: "/sup-admin/users", label: "Users", icon: IconUsersNav },
+  { href: "/sup-admin/email-templates", label: "Email Templates", icon: IconEmailTemplates },
+  { href: "/sup-admin/settings", label: "Settings", icon: IconSettingsNav },
 ] as const;
 
 function navActive(pathname: string, href: string) {
@@ -39,8 +39,8 @@ export function AdminMobileNav() {
         aria-label={open ? "Close menu" : "Open menu"}
       >
         {open ?
-          <X className="h-6 w-6" />
-        : <Menu className="h-6 w-6" />}
+          <IconClose className="h-6 w-6" />
+        : <IconMenu className="h-6 w-6" />}
       </button>
       {open ?
         <div
@@ -77,7 +77,7 @@ export function AdminMobileNav() {
                   className="flex min-h-[48px] items-center gap-3 rounded-lg px-3 py-3 text-base font-semibold text-accent"
                   onClick={() => setOpen(false)}
                 >
-                  <ArrowLeft className="h-5 w-5 shrink-0" />
+                  <IconBackApp className="h-5 w-5 shrink-0 text-accent" />
                   Back to app
                 </Link>
               </li>

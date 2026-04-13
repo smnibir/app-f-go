@@ -1,101 +1,153 @@
-import Link from "next/link";
+import { subDays, startOfDay, format } from "date-fns";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { SupAdminOverviewDashboard } from "@/components/sup-admin/SupAdminOverviewDashboard";
 
 export default async function SupAdminOverviewPage() {
   const session = await auth();
   const actorRole = session?.user?.role;
-  let users = 0;
-  let active = 0;
-  let entries = 0;
-  let files = 0;
-  let recent: {
-    id: string;
-    name: string | null;
-    email: string;
-    role: string;
-    createdAt: Date;
-  }[] = [];
 
-  if (process.env.DATABASE_URL?.trim()) {
-    try {
-      [users, active, entries, files] = await Promise.all([
-        prisma.user.count(),
-        prisma.user.count({ where: { status: "ACTIVE" } }),
-        prisma.timelineEntry.count(),
-        prisma.asset.count(),
-      ]);
-      recent = await prisma.user.findMany({
+  const empty = {
+    totals: {
+      users: 0,
+      active: 0,
+      suspended: 0,
+      verified: 0,
+      timelineEntries: 0,
+      files: 0,
+    },
+    roles: { endUser: 0, admin: 0, superAdmin: 0 },
+    timeline: { draft: 0, published: 0, scheduled: 0 },
+    assets: { image: 0, video: 0, audio: 0, pdf: 0 },
+    signupsByDay: [] as { label: string; count: number }[],
+    signupsWeek: 0,
+    signupsPrevWeek: 0,
+    entriesLast7d: 0,
+    recent: [] as {
+      id: string;
+      name: string | null;
+      email: string;
+      role: string;
+      createdAt: Date;
+    }[],
+  };
+
+  if (!process.env.DATABASE_URL?.trim()) {
+    return (
+      <SupAdminOverviewDashboard
+        actorRole={actorRole}
+        {...empty}
+      />
+    );
+  }
+
+  try {
+    const today = startOfDay(new Date());
+    const rollingWeekStart = subDays(today, 6);
+    const prevWeekEnd = subDays(rollingWeekStart, 1);
+    const prevWeekStart = subDays(rollingWeekStart, 7);
+    const fourteenDaysAgo = subDays(today, 13);
+
+    const dayKeys: string[] = [];
+    for (let i = 13; i >= 0; i--) {
+      dayKeys.push(format(subDays(today, i), "yyyy-MM-dd"));
+    }
+
+    const [
+      users,
+      active,
+      suspended,
+      verified,
+      timelineEntries,
+      files,
+      roleUser,
+      roleAdmin,
+      roleSuper,
+      draft,
+      published,
+      scheduled,
+      img,
+      vid,
+      aud,
+      pdf,
+      signupsWeek,
+      signupsPrevWeek,
+      entriesLast7d,
+      signupRows,
+      recent,
+    ] = await Promise.all([
+      prisma.user.count(),
+      prisma.user.count({ where: { status: "ACTIVE" } }),
+      prisma.user.count({ where: { status: "SUSPENDED" } }),
+      prisma.user.count({ where: { emailVerified: { not: null } } }),
+      prisma.timelineEntry.count(),
+      prisma.asset.count(),
+      prisma.user.count({ where: { role: "USER" } }),
+      prisma.user.count({ where: { role: "ADMIN" } }),
+      prisma.user.count({ where: { role: "SUPER_ADMIN" } }),
+      prisma.timelineEntry.count({ where: { status: "DRAFT" } }),
+      prisma.timelineEntry.count({ where: { status: "PUBLISHED" } }),
+      prisma.timelineEntry.count({ where: { status: "SCHEDULED" } }),
+      prisma.asset.count({ where: { type: "IMAGE" } }),
+      prisma.asset.count({ where: { type: "VIDEO" } }),
+      prisma.asset.count({ where: { type: "AUDIO" } }),
+      prisma.asset.count({ where: { type: "PDF" } }),
+      prisma.user.count({ where: { createdAt: { gte: rollingWeekStart } } }),
+      prisma.user.count({
+        where: {
+          createdAt: {
+            gte: prevWeekStart,
+            lte: prevWeekEnd,
+          },
+        },
+      }),
+      prisma.timelineEntry.count({
+        where: { createdAt: { gte: rollingWeekStart } },
+      }),
+      prisma.user.findMany({
+        where: { createdAt: { gte: fourteenDaysAgo } },
+        select: { createdAt: true },
+      }),
+      prisma.user.findMany({
         orderBy: { createdAt: "desc" },
         take: 10,
         select: { id: true, name: true, email: true, role: true, createdAt: true },
-      });
-    } catch {
-      /* DB unreachable during build or offline */
-    }
-  }
+      }),
+    ]);
 
-  return (
-    <div>
-      <h1 className="mb-2 text-3xl font-bold text-navy">Overview</h1>
-      <p className="mb-8 text-base text-gray-600">
-        High-level counts and the latest signups. Use the sidebar for detailed management.
-      </p>
-      <div className="mb-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {[
-          ["Total Users", users],
-          ["Active Users", active],
-          ["Timeline Entries", entries],
-          ["Files Uploaded", files],
-        ].map(([label, val]) => (
-          <div
-            key={String(label)}
-            className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm"
-          >
-            <p className="text-[15px] font-medium text-gray-600">{label}</p>
-            <p className="mt-2 text-3xl font-bold text-navy">{val}</p>
-          </div>
-        ))}
-      </div>
-      <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-        <h2 className="mb-4 text-xl font-bold text-navy">Recent registrations</h2>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[600px] text-left text-base">
-            <thead>
-              <tr className="border-b border-gray-200 text-gray-600">
-                <th className="py-3 pr-4">Name</th>
-                <th className="py-3 pr-4">Email</th>
-                <th className="py-3 pr-4">Role</th>
-                <th className="py-3 pr-4">Joined</th>
-                <th className="py-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recent.map((r) => (
-                <tr key={r.id} className="border-b border-gray-100">
-                  <td className="py-3 pr-4">{r.name || "—"}</td>
-                  <td className="py-3 pr-4">{r.email}</td>
-                  <td className="py-3 pr-4">{r.role}</td>
-                  <td className="py-3 pr-4">{r.createdAt.toLocaleDateString()}</td>
-                  <td className="py-3 text-right">
-                    {actorRole === "ADMIN" && r.role === "SUPER_ADMIN" ?
-                      <span className="text-sm text-gray-400" title="Only a super admin can open this account">
-                        —
-                      </span>
-                    : <Link
-                        href={`/sup-admin/users/${r.id}`}
-                        className="font-semibold text-navy hover:underline"
-                      >
-                        View / edit
-                      </Link>
-                    }
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  );
+    const counts = new Map<string, number>();
+    dayKeys.forEach((k) => counts.set(k, 0));
+    signupRows.forEach((u) => {
+      const k = format(startOfDay(u.createdAt), "yyyy-MM-dd");
+      if (counts.has(k)) counts.set(k, (counts.get(k) ?? 0) + 1);
+    });
+    const signupsByDay = dayKeys.map((k) => ({
+      label: format(new Date(`${k}T12:00:00`), "MMM d"),
+      count: counts.get(k) ?? 0,
+    }));
+
+    return (
+      <SupAdminOverviewDashboard
+        actorRole={actorRole}
+        totals={{
+          users,
+          active,
+          suspended,
+          verified,
+          timelineEntries,
+          files,
+        }}
+        roles={{ endUser: roleUser, admin: roleAdmin, superAdmin: roleSuper }}
+        timeline={{ draft, published, scheduled }}
+        assets={{ image: img, video: vid, audio: aud, pdf }}
+        signupsByDay={signupsByDay}
+        signupsWeek={signupsWeek}
+        signupsPrevWeek={signupsPrevWeek}
+        entriesLast7d={entriesLast7d}
+        recent={recent}
+      />
+    );
+  } catch {
+    return <SupAdminOverviewDashboard actorRole={actorRole} {...empty} />;
+  }
 }
