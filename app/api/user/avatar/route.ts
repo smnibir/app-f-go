@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { configureCloudinary, deleteCloudinaryAsset, cloudinary } from "@/lib/cloudinary";
+import { deleteCloudinaryAsset } from "@/lib/cloudinary";
 
 const schema = z.object({
   avatarUrl: z.string().url(),
@@ -25,9 +25,9 @@ export async function PATCH(req: Request) {
     select: { avatarPublicId: true },
   });
 
-  if (prev?.avatarPublicId && configureCloudinary()) {
+  if (prev?.avatarPublicId) {
     try {
-      await cloudinary.uploader.destroy(prev.avatarPublicId, { resource_type: "image" });
+      await deleteCloudinaryAsset(prev.avatarPublicId, "image");
     } catch {
       /* ignore */
     }
@@ -39,6 +39,33 @@ export async function PATCH(req: Request) {
       avatarUrl: parsed.data.avatarUrl,
       avatarPublicId: parsed.data.avatarPublicId,
     },
+  });
+
+  return NextResponse.json({ ok: true });
+}
+
+export async function DELETE() {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const prev = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { avatarPublicId: true },
+  });
+
+  if (prev?.avatarPublicId) {
+    try {
+      await deleteCloudinaryAsset(prev.avatarPublicId, "image");
+    } catch {
+      /* ignore */
+    }
+  }
+
+  await prisma.user.update({
+    where: { id: session.user.id },
+    data: { avatarUrl: null, avatarPublicId: null },
   });
 
   return NextResponse.json({ ok: true });

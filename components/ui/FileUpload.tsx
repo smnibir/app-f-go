@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { Upload, X, FileText, Music, Video, ImageIcon } from "lucide-react";
+import { Upload, X, FileText, Music, Video, ImageIcon, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { postFormDataWithProgress } from "@/lib/upload-xhr";
 
 export type UploadedFile = {
   id: string;
@@ -12,6 +13,13 @@ export type UploadedFile = {
   type: "IMAGE" | "VIDEO" | "AUDIO" | "PDF";
   size?: number;
   progress?: number;
+};
+
+type QueuedUpload = {
+  id: string;
+  filename: string;
+  progress: number;
+  error?: string;
 };
 
 type Props = {
@@ -26,50 +34,70 @@ export function FileUpload({ files, onAdd, onRemove, accept, disabled }: Props) 
   const inputRef = useRef<HTMLInputElement>(null);
   const [drag, setDrag] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState<QueuedUpload[]>([]);
 
   const handleFiles = useCallback(
     async (list: FileList | null) => {
       if (!list?.length || disabled) return;
+      const fileArr = Array.from(list);
       setBusy(true);
-      for (const file of Array.from(list)) {
-        const fd = new FormData();
-        fd.append("file", file);
-        const xhr = new XMLHttpRequest();
-        await new Promise<void>((resolve, reject) => {
-          xhr.open("POST", "/api/upload");
-          xhr.upload.onprogress = (e) => {
-            if (e.lengthComputable) {
-              const pct = Math.round((e.loaded / e.total) * 100);
-              // parent could track by temp id — simplified: skip granular
+
+      await Promise.all(
+        fileArr.map(async (file) => {
+          const id = crypto.randomUUID();
+          setUploading((q) => [...q, { id, filename: file.name, progress: 0 }]);
+
+          const fd = new FormData();
+          fd.append("file", file);
+
+          try {
+            const { ok, data } = await postFormDataWithProgress(
+              "/api/upload",
+              fd,
+              (pct) => {
+                setUploading((q) => q.map((u) => (u.id === id ? { ...u, progress: pct } : u)));
+              }
+            );
+            const res = data as { error?: string; publicId?: string; url?: string; type?: UploadedFile["type"]; filename?: string; size?: number };
+            if (!ok) {
+              setUploading((q) =>
+                q.map((u) =>
+                  u.id === id ? { ...u, progress: 0, error: res.error || "Upload failed" } : u
+                )
+              );
+              return;
             }
-          };
-          xhr.onload = () => {
-            try {
-              const res = JSON.parse(xhr.responseText) as Omit<UploadedFile, "id"> & {
-                error?: string;
-              };
-              if (xhr.status >= 400) throw new Error(res.error || "Upload failed");
-              onAdd({
-                id: res.publicId,
-                url: res.url,
-                publicId: res.publicId,
-                type: res.type,
-                filename: res.filename,
-                size: res.size,
-              });
-              resolve();
-            } catch (e) {
-              reject(e);
+            if (!res.publicId || !res.url || !res.type) {
+              setUploading((q) =>
+                q.map((u) => (u.id === id ? { ...u, progress: 0, error: "Invalid response" } : u))
+              );
+              return;
             }
-          };
-          xhr.onerror = () => reject(new Error("Upload failed"));
-          xhr.send(fd);
-        });
-      }
+            onAdd({
+              id: res.publicId,
+              url: res.url,
+              publicId: res.publicId,
+              type: res.type,
+              filename: res.filename ?? file.name,
+              size: res.size,
+            });
+            setUploading((q) => q.filter((u) => u.id !== id));
+          } catch {
+            setUploading((q) =>
+              q.map((u) => (u.id === id ? { ...u, progress: 0, error: "Network error" } : u))
+            );
+          }
+        })
+      );
+
       setBusy(false);
     },
     [disabled, onAdd]
   );
+
+  const dismissFailed = (id: string) => {
+    setUploading((q) => q.filter((u) => u.id !== id));
+  };
 
   return (
     <div>
@@ -90,12 +118,21 @@ export function FileUpload({ files, onAdd, onRemove, accept, disabled }: Props) 
         className={cn(
           "flex min-h-[160px] w-full flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-300 bg-white px-4 py-8 text-center transition",
           drag && "border-accent bg-gray-50",
-          disabled && "opacity-50"
+          (disabled || busy) && "opacity-70"
         )}
       >
-        <Upload className="mb-2 h-10 w-10 text-navy" aria-hidden />
-        <span className="text-base font-medium text-navy">Drag files here or tap to browse</span>
-        <span className="mt-1 text-[15px] text-gray-500">JPG, PNG, MP4, MP3, PDF — max 50MB</span>
+        {busy ?
+          <>
+            <Loader2 className="mb-2 h-10 w-10 animate-spin text-navy" aria-hidden />
+            <span className="text-base font-medium text-navy">Uploading…</span>
+            <span className="mt-1 text-[15px] text-gray-500">You can keep this page open</span>
+          </>
+        : <>
+            <Upload className="mb-2 h-10 w-10 text-navy" aria-hidden />
+            <span className="text-base font-medium text-navy">Drag files here or tap to browse</span>
+            <span className="mt-1 text-[15px] text-gray-500">JPG, PNG, MP4, MP3, PDF — max 50MB</span>
+          </>
+        }
         <input
           ref={inputRef}
           type="file"
@@ -105,6 +142,44 @@ export function FileUpload({ files, onAdd, onRemove, accept, disabled }: Props) 
           onChange={(e) => void handleFiles(e.target.files)}
         />
       </button>
+
+      {uploading.length > 0 ?
+        <ul className="mt-4 space-y-3" aria-live="polite">
+          {uploading.map((u) => (
+            <li
+              key={u.id}
+              className="flex items-center gap-3 rounded-lg border border-[#b3d9f2] bg-[#f0f7ff] p-3"
+            >
+              <Loader2 className="h-6 w-6 shrink-0 animate-spin text-[#0056b3]" aria-hidden />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-base font-medium text-gray-900">{u.filename}</p>
+                {u.error ?
+                  <p className="mt-1 text-sm text-red-600">{u.error}</p>
+                : <>
+                    <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-white">
+                      <div
+                        className="h-full rounded-full bg-[#0056b3] transition-[width] duration-150"
+                        style={{ width: `${u.progress}%` }}
+                      />
+                    </div>
+                    <p className="mt-1 text-xs text-gray-600">{u.progress}% uploaded</p>
+                  </>
+                }
+              </div>
+              {u.error ?
+                <button
+                  type="button"
+                  className="shrink-0 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-white/80"
+                  onClick={() => dismissFailed(u.id)}
+                >
+                  Dismiss
+                </button>
+              : null}
+            </li>
+          ))}
+        </ul>
+      : null}
+
       <ul className="mt-4 space-y-3">
         {files.map((f) => (
           <li
@@ -114,14 +189,6 @@ export function FileUpload({ files, onAdd, onRemove, accept, disabled }: Props) 
             <FileIcon type={f.type} />
             <div className="min-w-0 flex-1">
               <p className="truncate text-base font-medium text-gray-900">{f.filename}</p>
-              {f.progress !== undefined && f.progress < 100 ?
-                <div className="mt-1 h-2 w-full rounded bg-gray-100">
-                  <div
-                    className="h-2 rounded bg-navy transition-all"
-                    style={{ width: `${f.progress}%` }}
-                  />
-                </div>
-              : null}
             </div>
             <button
               type="button"

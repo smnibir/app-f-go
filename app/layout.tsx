@@ -1,10 +1,16 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Providers } from "@/components/Providers";
 
 export const metadata: Metadata = {
   title: "FutureGo",
   description: "Your personal life timeline",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#f8f9fa",
 };
 
 export default function RootLayout({

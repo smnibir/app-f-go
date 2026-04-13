@@ -2,11 +2,11 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { timelineEntryPatchSchema } from "@/lib/validations";
-import { configureCloudinary, cloudinary } from "@/lib/cloudinary";
+import { configureCloudinaryWithSettings, cloudinary } from "@/lib/cloudinary";
 import type { EntryStatus } from "@prisma/client";
 
 async function destroyAssets(assets: { publicId: string; type: string }[]) {
-  if (!configureCloudinary()) return;
+  if (!(await configureCloudinaryWithSettings())) return;
   for (const a of assets) {
     const rt =
       a.type === "IMAGE" ? "image"

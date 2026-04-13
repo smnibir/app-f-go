@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { configureCloudinary, cloudinary } from "@/lib/cloudinary";
+import { configureCloudinaryWithSettings, cloudinary } from "@/lib/cloudinary";
 import { classifyUpload, MAX_UPLOAD_BYTES } from "@/lib/asset-types";
 
 export async function POST(req: Request) {
@@ -8,13 +8,21 @@ export async function POST(req: Request) {
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!configureCloudinary()) {
-    return NextResponse.json({ error: "Upload not configured" }, { status: 500 });
-  }
 
   const form = await req.formData();
   const file = form.get("file");
   const purpose = (form.get("purpose") as string | null) || "timeline";
+
+  if (purpose === "branding") {
+    const role = session.user.role;
+    if (role !== "ADMIN" && role !== "SUPER_ADMIN") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+  }
+
+  if (!(await configureCloudinaryWithSettings())) {
+    return NextResponse.json({ error: "Upload not configured" }, { status: 500 });
+  }
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "No file" }, { status: 400 });
   }
@@ -34,9 +42,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Profile photo must be an image" }, { status: 400 });
   }
 
+  if (purpose === "branding" && classified.type !== "IMAGE") {
+    return NextResponse.json({ error: "Logo must be an image (JPG or PNG)" }, { status: 400 });
+  }
+
   const buffer = Buffer.from(await file.arrayBuffer());
   const folder =
-    purpose === "avatar" ? "futurego/avatars" : "futurego/timeline";
+    purpose === "avatar" ? "futurego/avatars"
+    : purpose === "branding" ? "futurego/branding"
+    : "futurego/timeline";
 
   const uploadOptions: Record<string, string | boolean> = {
     folder,
@@ -77,7 +91,7 @@ export async function DELETE(req: Request) {
   if (!publicId) {
     return NextResponse.json({ error: "publicId required" }, { status: 400 });
   }
-  if (!configureCloudinary()) {
+  if (!(await configureCloudinaryWithSettings())) {
     return NextResponse.json({ error: "Not configured" }, { status: 500 });
   }
   await cloudinary.uploader.destroy(publicId, { resource_type: "auto" });

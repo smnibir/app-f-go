@@ -76,10 +76,47 @@ export const updatePasswordSchema = z
     path: ["confirmPassword"],
   });
 
-export const adminUserCreateSchema = z.object({
-  name: z.string().min(1),
-  email: z.string().email(),
-  password: z.string().min(8),
-  role: z.enum(["ADMIN", "USER"]),
-  sendWelcome: z.boolean().optional(),
+export const adminUserCreateSchema = z
+  .object({
+    name: z.string().min(1),
+    email: z.string().email(),
+    password: passwordSchema,
+    confirmPassword: z.string(),
+    role: z.enum(["SUPER_ADMIN", "ADMIN", "USER"]),
+    sendWelcomeEmail: z.boolean().optional(),
+  })
+  .refine((d) => d.password === d.confirmPassword, {
+    message: "Passwords must match",
+    path: ["confirmPassword"],
+  });
+
+/** Admin updates to an existing user (no password here). */
+export const adminUserPatchSchema = z
+  .object({
+    /** Cleared name is stored as null. */
+    name: z.string().max(200).optional(),
+    role: z.enum(["SUPER_ADMIN", "ADMIN", "USER"]).optional(),
+    status: z.enum(["ACTIVE", "SUSPENDED"]).optional(),
+  })
+  .refine((d) => d.name !== undefined || d.role !== undefined || d.status !== undefined, {
+    message: "No changes",
+  });
+
+export const supAdminSettingsPatchSchema = z.object({
+  app_name: z.string().min(1).max(200).optional(),
+  from_email: z.string().email().optional(),
+  /** Empty or omitted = leave unchanged. Non-empty = replace stored key. */
+  sendgrid_api_key: z.string().optional(),
+  logo_url: z.string().optional(),
+  logo_public_id: z.string().optional(),
+  cloudinary_cloud_name: z.string().max(200).optional(),
+  cloudinary_api_key: z.string().optional(),
+  cloudinary_api_secret: z.string().optional(),
+});
+
+export const emailTemplatePatchSchema = z.object({
+  key: z.string().min(1),
+  subject: z.string().min(1).max(500),
+  htmlBody: z.string().min(1),
+  variables: z.string().max(4000).optional(),
 });

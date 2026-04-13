@@ -182,100 +182,119 @@ export function EventForm({
     router.refresh();
   }
 
-  return (
-    <div className="mx-auto max-w-xl px-4 py-8">
-      <Link
-        href={backHref}
-        className="mb-6 inline-flex min-h-[48px] items-center gap-2 text-base font-semibold text-navy"
-      >
-        <ArrowLeft className="h-5 w-5" />
-        Back
-      </Link>
-      <h1 className="mb-8 text-3xl font-bold text-navy">
-        {mode === "create" ? "Upload Event" : "Edit Event"}
-      </h1>
+  const heading = mode === "create" ? "Upload Event" : "Edit Event";
 
-      <div className="space-y-6">
-        <div>
-          <label className="mb-1 block text-base font-medium text-gray-800">Event Title *</label>
-          <Input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="e.g. My wedding day"
-            required
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-base font-medium text-gray-800">
-            What happened? (optional)
-          </label>
-          <Textarea
-            rows={4}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-          />
-        </div>
-        <div>
-          <p className="mb-1 text-base font-medium text-gray-800">When did this happen? *</p>
-          <DatePicker value={date} onChange={(d) => setDate(startOfDay(d))} />
-          <p className="mt-2 text-base text-gray-700">{labelDate}</p>
-        </div>
-        <div className="space-y-4 rounded-xl border border-gray-200 bg-white p-4">
-          <p className="text-base font-semibold text-navy">
-            When should this appear on your timeline?
+  return (
+    <div className="min-h-screen bg-surface">
+      <header className="border-b border-gray-200 bg-white shadow-sm">
+        <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6 md:flex-row md:items-center md:justify-between md:py-7">
+          <div className="flex min-w-0 flex-wrap items-center gap-3">
+            <Link
+              href={backHref}
+              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-navy shadow-sm transition hover:bg-gray-50"
+              aria-label="Back"
+            >
+              <ArrowLeft className="h-6 w-6" />
+            </Link>
+            <h1 className="text-[26px] font-bold leading-tight text-navy md:text-[28px]">{heading}</h1>
+          </div>
+          <p className="text-[15px] leading-relaxed text-gray-600 md:max-w-sm md:text-right">
+            {mode === "create" ?
+              "Add the story, then publish or save as a draft. Media is optional."
+            : "Update your event, schedule, or attached files."}
           </p>
-          <Toggle
-            id="pub"
-            label="Publish immediately"
-            checked={publishImmediately}
-            onCheckedChange={setPublishImmediately}
-          />
-          {!publishImmediately ?
+        </div>
+      </header>
+
+      <div className="mx-auto max-w-6xl px-4 py-8">
+        <div className="grid gap-10 lg:grid-cols-2 lg:gap-12 lg:items-start">
+          <div className="space-y-6">
             <div>
-              <label className="mb-1 block text-base text-gray-800">Date and time</label>
+              <label className="mb-1 block text-base font-medium text-gray-800">Event Title *</label>
               <Input
-                type="datetime-local"
-                value={scheduleAt}
-                onChange={(e) => setScheduleAt(e.target.value)}
-                className="min-h-[52px]"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="e.g. My wedding day"
+                required
               />
-              {scheduleAt ?
-                <p className="mt-2 text-base text-gray-700">
-                  This will appear on {format(new Date(scheduleAt), "d MMMM yyyy 'at' HH:mm")}
-                </p>
+            </div>
+            <div>
+              <label className="mb-1 block text-base font-medium text-gray-800">
+                What happened? (optional)
+              </label>
+              <Textarea
+                rows={4}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+              />
+            </div>
+            <div>
+              <p className="mb-1 text-base font-medium text-gray-800">When did this happen? *</p>
+              <DatePicker value={date} onChange={(d) => setDate(startOfDay(d))} />
+              <p className="mt-2 text-base text-gray-700">{labelDate}</p>
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            <div className="space-y-4 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+              <p className="text-base font-semibold text-navy">When should this appear on your timeline?</p>
+              <Toggle
+                id="pub"
+                label="Publish immediately"
+                checked={publishImmediately}
+                onCheckedChange={setPublishImmediately}
+              />
+              {!publishImmediately ?
+                <div>
+                  <label className="mb-1 block text-base text-gray-800">Date and time</label>
+                  <Input
+                    type="datetime-local"
+                    value={scheduleAt}
+                    onChange={(e) => setScheduleAt(e.target.value)}
+                    className="min-h-[52px]"
+                  />
+                  {scheduleAt ?
+                    <p className="mt-2 text-base text-gray-700">
+                      This will appear on {format(new Date(scheduleAt), "d MMMM yyyy 'at' HH:mm")}
+                    </p>
+                  : null}
+                </div>
               : null}
             </div>
-          : null}
+            <div>
+              <p className="mb-2 text-base font-medium text-gray-800">Upload files (optional)</p>
+              <FileUpload
+                files={files}
+                onAdd={(f) => setFiles((x) => [...x, f])}
+                onRemove={(pid) => void removeFile(pid)}
+                accept="image/jpeg,image/png,video/mp4,video/quicktime,audio/mpeg,application/pdf"
+              />
+            </div>
+            <div className="flex flex-col gap-3 pt-2">
+              <Button type="button" variant="secondary" disabled={loading} onClick={() => void saveDraft()}>
+                Save as Draft
+              </Button>
+              <Button type="button" disabled={loading} onClick={() => void publishOrSchedule()}>
+                {!publishImmediately && scheduleAt && new Date(scheduleAt) > new Date() ?
+                  "Schedule Event"
+                : "Publish to Timeline"}
+              </Button>
+            </div>
+          </div>
         </div>
-        <div>
-          <p className="mb-2 text-base font-medium text-gray-800">Upload files (optional)</p>
-          <FileUpload
-            files={files}
-            onAdd={(f) => setFiles((x) => [...x, f])}
-            onRemove={(pid) => void removeFile(pid)}
-            accept="image/jpeg,image/png,video/mp4,video/quicktime,audio/mpeg,application/pdf"
-          />
-        </div>
-        <div className="flex flex-col gap-3 pt-4">
-          <Button type="button" variant="secondary" disabled={loading} onClick={() => void saveDraft()}>
-            Save as Draft
-          </Button>
-          <Button type="button" disabled={loading} onClick={() => void publishOrSchedule()}>
-            {!publishImmediately && scheduleAt && new Date(scheduleAt) > new Date() ?
-              "Schedule Event"
-            : "Publish to Timeline"}
-          </Button>
-        </div>
+
         {mode === "edit" && entryId ?
           <>
-            <Button
-              type="button"
-              variant="danger"
-              className="mt-8"
-              onClick={() => setConfirmDel(true)}
-            >
-              Delete Event
-            </Button>
+            <div className="mt-12 border-t border-gray-200 pt-10">
+              <Button
+                type="button"
+                variant="danger"
+                className="max-w-md"
+                onClick={() => setConfirmDel(true)}
+              >
+                Delete Event
+              </Button>
+            </div>
             <ConfirmModal
               open={confirmDel}
               onOpenChange={setConfirmDel}

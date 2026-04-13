@@ -1,7 +1,7 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useRef } from "react";
+import { useRouter, usePathname } from "next/navigation";
+import { useRef, useState } from "react";
 import {
   Waypoints,
   Upload,
@@ -9,8 +9,10 @@ import {
   Home,
   Lock,
   Camera,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { postFormDataWithProgress } from "@/lib/upload-xhr";
 import { Avatar } from "@/components/ui/Avatar";
 
 type Props = {
@@ -21,38 +23,41 @@ type Props = {
   };
 };
 
-const cx = 240;
-const cy = 240;
-const rOuter = 220;
-const rInner = 88;
+const DIAL_BLUE = "#0056b3";
+const CX = 240;
+const CY = 240;
+const R_OUTER = 220;
+const R_INNER = 88;
 
-function deg(d: number) {
+function rad(d: number) {
   return (d * Math.PI) / 180;
 }
 
 function ringSlicePath(startDeg: number, sweep: number) {
   const a0 = startDeg;
   const a1 = startDeg + sweep;
-  const xo0 = cx + rOuter * Math.cos(deg(a0));
-  const yo0 = cy + rOuter * Math.sin(deg(a0));
-  const xo1 = cx + rOuter * Math.cos(deg(a1));
-  const yo1 = cy + rOuter * Math.sin(deg(a1));
-  const xi0 = cx + rInner * Math.cos(deg(a0));
-  const yi0 = cy + rInner * Math.sin(deg(a0));
-  const xi1 = cx + rInner * Math.cos(deg(a1));
-  const yi1 = cy + rInner * Math.sin(deg(a1));
+  const xo0 = CX + R_OUTER * Math.cos(rad(a0));
+  const yo0 = CY + R_OUTER * Math.sin(rad(a0));
+  const xo1 = CX + R_OUTER * Math.cos(rad(a1));
+  const yo1 = CY + R_OUTER * Math.sin(rad(a1));
+  const xi0 = CX + R_INNER * Math.cos(rad(a0));
+  const yi0 = CY + R_INNER * Math.sin(rad(a0));
+  const xi1 = CX + R_INNER * Math.cos(rad(a1));
+  const yi1 = CY + R_INNER * Math.sin(rad(a1));
   const large = sweep > 180 ? 1 : 0;
   return [
     `M ${xo0} ${yo0}`,
-    `A ${rOuter} ${rOuter} 0 ${large} 1 ${xo1} ${yo1}`,
+    `A ${R_OUTER} ${R_OUTER} 0 ${large} 1 ${xo1} ${yo1}`,
     `L ${xi1} ${yi1}`,
-    `A ${rInner} ${rInner} 0 ${large} 0 ${xi0} ${yi0}`,
+    `A ${R_INNER} ${R_INNER} 0 ${large} 0 ${xi0} ${yi0}`,
     "Z",
   ].join(" ");
 }
 
-const SLICE = 72;
-const START = -90 - SLICE / 2;
+const N = 5;
+const GAP_DEG = 3.5;
+const SEG_WIDTH = (360 - N * GAP_DEG) / N;
+const MID_ANGLES = Array.from({ length: N }, (_, i) => -90 + i * (SEG_WIDTH + GAP_DEG));
 
 const segments = [
   { label: "View Timeline", icon: Waypoints, href: "/dashboard/timeline", locked: false, lockBadge: false },
@@ -68,77 +73,95 @@ const segments = [
   { label: "Documents", icon: Lock, locked: true, tip: "Coming soon", lockBadge: false },
 ] as const;
 
+function activeSegmentIndex(pathname: string): number | null {
+  if (pathname.startsWith("/dashboard/timeline")) return 0;
+  if (pathname.includes("/upload-event")) return 1;
+  return null;
+}
+
 export function Dial({ user }: Props) {
   const router = useRouter();
+  const pathname = usePathname();
   const fileRef = useRef<HTMLInputElement>(null);
+  const [hovered, setHovered] = useState<number | null>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarUploadPct, setAvatarUploadPct] = useState(0);
+  const routeActive = activeSegmentIndex(pathname ?? "");
 
   async function onAvatarFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
+    e.target.value = "";
     if (!file) return;
-    const fd = new FormData();
-    fd.append("file", file);
-    fd.append("purpose", "avatar");
-    const res = await fetch("/api/upload", { method: "POST", body: fd });
-    const data = (await res.json()) as { url?: string; publicId?: string; error?: string };
-    if (!res.ok || !data.url || !data.publicId) return;
-    await fetch("/api/user/avatar", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ avatarUrl: data.url, avatarPublicId: data.publicId }),
-    });
-    router.refresh();
+    setAvatarUploading(true);
+    setAvatarUploadPct(0);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("purpose", "avatar");
+      const { ok, data } = await postFormDataWithProgress("/api/upload", fd, (pct) =>
+        setAvatarUploadPct(pct)
+      );
+      const payload = data as { url?: string; publicId?: string; error?: string };
+      if (!ok || !payload.url || !payload.publicId) return;
+      await fetch("/api/user/avatar", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ avatarUrl: payload.url, avatarPublicId: payload.publicId }),
+      });
+      router.refresh();
+    } finally {
+      setAvatarUploading(false);
+    }
   }
 
   return (
     <div className="flex flex-col items-center justify-center px-4 py-8 md:py-12">
-      <div className="relative w-full max-w-[min(100vw-2rem,520px)] aspect-square">
+      <div className="relative aspect-square w-full max-w-[min(100vw-2rem,520px)]">
         <svg viewBox="0 0 480 480" className="h-full w-full">
-          <circle cx={cx} cy={cy} r={rOuter + 4} fill="#ffffff" stroke="#e5e7eb" strokeWidth={1} />
+          <circle cx={CX} cy={CY} r={R_OUTER + 4} fill="#ffffff" />
+
           {segments.map((seg, i) => {
-            const start = START + i * SLICE;
-            const path = ringSlicePath(start, SLICE);
-            const mid = start + SLICE / 2;
-            const lx = cx + (rInner + (rOuter - rInner) * 0.52) * Math.cos(deg(mid));
-            const ly = cy + (rInner + (rOuter - rInner) * 0.52) * Math.sin(deg(mid));
+            const mid = MID_ANGLES[i];
+            const start = mid - SEG_WIDTH / 2;
+            const path = ringSlicePath(start, SEG_WIDTH);
+            const lx = CX + (R_INNER + (R_OUTER - R_INNER) * 0.52) * Math.cos(rad(mid));
+            const ly = CY + (R_INNER + (R_OUTER - R_INNER) * 0.52) * Math.sin(rad(mid));
             const Icon = seg.icon;
+            const isRoute = !seg.locked && routeActive === i;
+            const isHover = !seg.locked && hovered === i;
+            const filled = seg.locked ? false : isRoute || isHover;
+
             return (
               <g
                 key={seg.label}
-                className={cn(
-                  "group",
-                  !seg.locked && "cursor-pointer hover:[&>path:first-child]:fill-gray-50"
-                )}
+                className="outline-none"
+                onMouseEnter={() => !seg.locked && setHovered(i)}
+                onMouseLeave={() => setHovered(null)}
                 onClick={
-                  seg.locked ?
-                    undefined
-                  : () => router.push("href" in seg ? seg.href : "/dashboard")
+                  seg.locked ? undefined : () => router.push("href" in seg ? seg.href : "/dashboard")
                 }
-                role={seg.locked ? undefined : "link"}
-                tabIndex={seg.locked ? -1 : 0}
-                onKeyDown={
-                  seg.locked ?
-                    undefined
-                  : (e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        router.push("href" in seg ? seg.href : "/dashboard");
-                      }
-                    }
-                }
+                role={seg.locked ? undefined : "button"}
+                tabIndex={-1}
+                style={{ cursor: seg.locked ? "not-allowed" : "pointer" }}
               >
                 <title>{seg.locked ? seg.tip : seg.label}</title>
                 <path
                   d={path}
-                  className={cn(
-                    "stroke-gray-200 stroke-[1] transition-colors",
-                    seg.locked ? "cursor-not-allowed fill-white opacity-60" : "fill-white"
-                  )}
+                  className="transition-[fill] duration-200 ease-out"
+                  fill={seg.locked ? "#ffffff" : filled ? DIAL_BLUE : "#ffffff"}
+                  fillOpacity={seg.locked ? 0.65 : 1}
+                  stroke="none"
                 />
-                <foreignObject x={lx - 60} y={ly - 52} width={120} height={104}>
-                  <div className="flex h-full w-full flex-col items-center justify-center text-center">
+                <foreignObject x={lx - 62} y={ly - 52} width={124} height={104}>
+                  <div className="pointer-events-none flex h-full w-full flex-col items-center justify-center gap-1 text-center">
                     <span className="relative inline-flex">
                       <Icon
-                        className={cn("h-8 w-8", seg.locked ? "text-gray-400" : "text-navy")}
+                        className={cn(
+                          "h-8 w-8",
+                          filled ? "text-white"
+                          : seg.locked ? "text-gray-400"
+                          : "text-[#0056b3]"
+                        )}
                         strokeWidth={1.75}
                       />
                       {seg.locked && seg.lockBadge ?
@@ -149,8 +172,10 @@ export function Dial({ user }: Props) {
                     </span>
                     <span
                       className={cn(
-                        "mt-2 px-1 text-[16px] font-semibold leading-tight tracking-tight",
-                        seg.locked ? "text-gray-500" : "text-navy"
+                        "mt-1 px-1 text-[15px] font-semibold leading-tight tracking-tight",
+                        seg.locked ? "text-gray-500"
+                        : filled ? "text-white"
+                        : "text-navy"
                       )}
                     >
                       {seg.label}
@@ -161,19 +186,28 @@ export function Dial({ user }: Props) {
             );
           })}
         </svg>
+
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <div className="pointer-events-auto flex flex-col items-center gap-2">
             <button
               type="button"
               onClick={() => fileRef.current?.click()}
-              className="flex h-[128px] w-[128px] flex-col items-center justify-center gap-2 rounded-full border border-gray-200 bg-white shadow-sm"
+              disabled={avatarUploading}
+              className="relative flex h-[128px] w-[128px] flex-col items-center justify-center gap-2 rounded-full bg-white shadow-sm outline-none transition hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-[#0056b3]/35 focus-visible:ring-offset-2 disabled:opacity-75"
               aria-label="Upload your photo"
             >
-              {user.avatarUrl ?
+              {avatarUploading ?
+                <>
+                  <Loader2 className="h-10 w-10 animate-spin text-[#0056b3]" aria-hidden />
+                  <span className="px-1 text-center text-[13px] font-semibold tabular-nums text-[#0056b3]">
+                    {avatarUploadPct}%
+                  </span>
+                </>
+              : user.avatarUrl ?
                 <Avatar src={user.avatarUrl} name={user.name} email={user.email} size={120} />
               : <>
-                  <Camera className="h-10 w-10 text-navy" strokeWidth={1.5} />
-                  <span className="px-2 text-center text-[16px] font-semibold leading-snug text-navy">
+                  <Camera className="h-10 w-10 text-[#0056b3]" strokeWidth={1.5} />
+                  <span className="px-2 text-center text-[15px] font-semibold leading-snug text-[#0056b3]">
                     Upload your photo
                   </span>
                 </>

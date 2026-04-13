@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   addMonths,
   eachDayOfInterval,
@@ -20,10 +20,16 @@ type Props = {
   onChange: (d: Date) => void;
   minYear?: number;
   maxYear?: number;
+  /** Hide the “Selected:” footer (e.g. inside a popover) */
+  compact?: boolean;
 };
 
-export function DatePicker({ value, onChange, minYear = 1900, maxYear = 2100 }: Props) {
+export function DatePicker({ value, onChange, minYear = 1900, maxYear = 2100, compact = false }: Props) {
   const [view, setView] = useState(() => startOfMonth(value));
+
+  useEffect(() => {
+    setView(startOfMonth(value));
+  }, [value]);
 
   const days = useMemo(() => {
     const start = startOfWeek(startOfMonth(view));
@@ -35,7 +41,7 @@ export function DatePicker({ value, onChange, minYear = 1900, maxYear = 2100 }: 
   const canNext = view.getFullYear() < maxYear || view.getMonth() < 11;
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4">
+    <div className={cn("rounded-xl border border-gray-200 bg-white", compact ? "p-3 sm:p-4" : "p-4")}>
       <div className="mb-4 flex items-center justify-between">
         <button
           type="button"
@@ -83,12 +89,14 @@ export function DatePicker({ value, onChange, minYear = 1900, maxYear = 2100 }: 
           );
         })}
       </div>
-      <p className="mt-4 text-center text-base text-gray-700" aria-live="polite">
-        Selected:{" "}
-        <span className="font-semibold text-navy">
-          {format(value, "d MMMM yyyy")}
-        </span>
-      </p>
+      {!compact ?
+        <p className="mt-4 text-center text-base text-gray-700" aria-live="polite">
+          Selected:{" "}
+          <span className="font-semibold text-navy">
+            {format(value, "d MMMM yyyy")}
+          </span>
+        </p>
+      : null}
     </div>
   );
 }
