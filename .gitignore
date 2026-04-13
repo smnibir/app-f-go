@@ -15,6 +15,9 @@
 
 # misc
 .DS_Store
+
+# cursor (local IDE / plugin workspace settings — not used by build)
+.cursor/
 *.pem
 
 # debug
