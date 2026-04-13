@@ -7,7 +7,12 @@ export function classifyUpload(
   mime: string
 ): { type: AssetType; resourceType: "image" | "video" | "raw" } | null {
   const lower = filename.toLowerCase();
-  if (/\.(jpe?g|png|gif|webp)$/i.test(lower) || mime.startsWith("image/")) {
+  if (
+    /\.(jpe?g|png|gif|webp|ico)$/i.test(lower) ||
+    mime.startsWith("image/") ||
+    mime === "image/x-icon" ||
+    mime === "image/vnd.microsoft.icon"
+  ) {
     return { type: "IMAGE", resourceType: "image" };
   }
   if (/\.(mp4|mov)$/i.test(lower) || mime.startsWith("video/")) {

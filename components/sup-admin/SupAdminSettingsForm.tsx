@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { Textarea } from "@/components/ui/Textarea";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { useToast } from "@/components/ui/Toaster";
 import { cn } from "@/lib/utils";
@@ -12,6 +13,11 @@ type SettingsPayload = {
   app_name: string;
   logo_url: string;
   logo_public_id: string;
+  favicon_url: string;
+  favicon_public_id: string;
+  inject_head: string;
+  inject_body_start: string;
+  inject_body_end: string;
   from_email: string;
   sendgrid: { masked: string; configured: boolean };
   cloudinary_cloud_name: string;
@@ -35,6 +41,13 @@ export function SupAdminSettingsForm({ dbConnected }: { dbConnected: boolean }) 
   const [logoPublicId, setLogoPublicId] = useState("");
   const [uploading, setUploading] = useState(false);
   const [logoUploadPct, setLogoUploadPct] = useState(0);
+  const [faviconUrl, setFaviconUrl] = useState("");
+  const [faviconPublicId, setFaviconPublicId] = useState("");
+  const [faviconUploading, setFaviconUploading] = useState(false);
+  const [faviconUploadPct, setFaviconUploadPct] = useState(0);
+  const [injectHead, setInjectHead] = useState("");
+  const [injectBodyStart, setInjectBodyStart] = useState("");
+  const [injectBodyEnd, setInjectBodyEnd] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -55,6 +68,11 @@ export function SupAdminSettingsForm({ dbConnected }: { dbConnected: boolean }) 
     setFromEmail(s.from_email);
     setLogoUrl(s.logo_url);
     setLogoPublicId(s.logo_public_id);
+    setFaviconUrl(s.favicon_url ?? "");
+    setFaviconPublicId(s.favicon_public_id ?? "");
+    setInjectHead(s.inject_head ?? "");
+    setInjectBodyStart(s.inject_body_start ?? "");
+    setInjectBodyEnd(s.inject_body_end ?? "");
     setSendgridKey("");
     setCloudinaryCloudName(s.cloudinary_cloud_name ?? "");
     setCloudinaryApiKey("");
@@ -104,10 +122,7 @@ export function SupAdminSettingsForm({ dbConnected }: { dbConnected: boolean }) 
       }
       if (out.settings) {
         setData(out.settings);
-        setAppName(out.settings.app_name);
-        setFromEmail(out.settings.from_email);
-        setLogoUrl(out.settings.logo_url);
-        setLogoPublicId(out.settings.logo_public_id);
+        applySettingsFromPayload(out.settings);
       }
       toast({ title: "Logo updated", description: "Branding saved." });
     } finally {
@@ -135,12 +150,134 @@ export function SupAdminSettingsForm({ dbConnected }: { dbConnected: boolean }) 
       }
       if (json.settings) {
         setData(json.settings);
-        setLogoUrl("");
-        setLogoPublicId("");
-        setAppName(json.settings.app_name);
-        setFromEmail(json.settings.from_email);
+        applySettingsFromPayload(json.settings);
       }
       toast({ title: "Logo removed" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function onUploadFavicon(file: File) {
+    setFaviconUploading(true);
+    setFaviconUploadPct(0);
+    try {
+      const fd = new FormData();
+      fd.set("file", file);
+      fd.set("purpose", "favicon");
+      const { ok, data } = await postFormDataWithProgress("/api/upload", fd, (pct) =>
+        setFaviconUploadPct(pct)
+      );
+      const json = data as { error?: string; url?: string; publicId?: string };
+      if (!ok) {
+        toast({
+          title: "Upload failed",
+          description: json.error || "Could not upload favicon.",
+          variant: "destructive",
+        });
+        return;
+      }
+      setFaviconUrl(json.url!);
+      setFaviconPublicId(json.publicId!);
+      const patch = await fetch("/api/sup-admin/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ favicon_url: json.url!, favicon_public_id: json.publicId! }),
+      });
+      const out = await patch.json();
+      if (!patch.ok) {
+        toast({
+          title: "Could not save favicon",
+          description: typeof out.error === "string" ? out.error : "Try again.",
+          variant: "destructive",
+        });
+        return;
+      }
+      if (out.settings) {
+        setData(out.settings);
+        applySettingsFromPayload(out.settings);
+      }
+      toast({ title: "Favicon updated" });
+    } finally {
+      setFaviconUploading(false);
+      setFaviconUploadPct(0);
+    }
+  }
+
+  function applySettingsFromPayload(s: SettingsPayload) {
+    setAppName(s.app_name);
+    setFromEmail(s.from_email);
+    setLogoUrl(s.logo_url);
+    setLogoPublicId(s.logo_public_id);
+    setFaviconUrl(s.favicon_url ?? "");
+    setFaviconPublicId(s.favicon_public_id ?? "");
+    setInjectHead(s.inject_head ?? "");
+    setInjectBodyStart(s.inject_body_start ?? "");
+    setInjectBodyEnd(s.inject_body_end ?? "");
+    setCloudinaryCloudName(s.cloudinary_cloud_name ?? "");
+  }
+
+  async function removeFavicon() {
+    setSaving(true);
+    try {
+      const res = await fetch("/api/sup-admin/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ favicon_url: "", favicon_public_id: "" }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        toast({
+          title: "Could not remove favicon",
+          description: typeof json.error === "string" ? json.error : "Try again.",
+          variant: "destructive",
+        });
+        return;
+      }
+      if (json.settings) {
+        setData(json.settings);
+        applySettingsFromPayload(json.settings);
+      }
+      toast({ title: "Favicon removed" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveSiteScripts(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      const res = await fetch("/api/sup-admin/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          inject_head: injectHead,
+          inject_body_start: injectBodyStart,
+          inject_body_end: injectBodyEnd,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        toast({
+          title: "Save failed",
+          description:
+            typeof json.error === "object" && json.error ?
+              JSON.stringify(json.error)
+            : typeof json.error === "string" ? json.error
+            : "Try again.",
+          variant: "destructive",
+        });
+        return;
+      }
+      if (json.settings) {
+        setData(json.settings);
+        applySettingsFromPayload(json.settings);
+      }
+      toast({
+        title: "Scripts saved",
+        description: "Reload the site or open a new tab to apply injected markup.",
+      });
     } finally {
       setSaving(false);
     }
@@ -179,6 +316,7 @@ export function SupAdminSettingsForm({ dbConnected }: { dbConnected: boolean }) 
       }
       if (json.settings) {
         setData(json.settings);
+        applySettingsFromPayload(json.settings);
         setSendgridKey("");
         setCloudinaryApiKey("");
         setCloudinaryApiSecret("");
@@ -266,6 +404,128 @@ export function SupAdminSettingsForm({ dbConnected }: { dbConnected: boolean }) 
           </div>
         </div>
       </section>
+
+      <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <h2 className="mb-2 text-lg font-bold text-navy">Favicon</h2>
+        <p className="mb-4 text-sm text-gray-600">
+          Shown in browser tabs and bookmarks. Square PNG or ICO works best (e.g. 32×32 or 48×48).
+        </p>
+        <div className="flex flex-col items-center gap-3">
+          {faviconUrl ?
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={faviconUrl}
+              alt=""
+              className="h-16 w-16 rounded-lg border border-gray-100 object-contain"
+            />
+          : <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-gray-100 text-xs text-gray-500">
+              No favicon
+            </div>
+          }
+          <div className="mx-auto flex w-full max-w-xl flex-col items-center gap-2">
+            {faviconUploading ?
+              <div className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+                <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200">
+                  <div
+                    className="h-full rounded-full bg-navy transition-[width] duration-150"
+                    style={{ width: `${faviconUploadPct}%` }}
+                  />
+                </div>
+                <p className="mt-1 text-center text-xs text-gray-600">
+                  Uploading favicon… {faviconUploadPct}%
+                </p>
+              </div>
+            : null}
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <label
+                className={cn("cursor-pointer", (faviconUploading || uploading) && "pointer-events-none opacity-70")}
+              >
+                <span className="inline-flex min-h-[44px] items-center rounded-xl border border-gray-200 bg-white px-4 text-sm font-semibold text-navy hover:bg-gray-50">
+                  {faviconUploading ? "Uploading…" : "Upload favicon"}
+                </span>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif,image/x-icon,.ico"
+                  className="sr-only"
+                  disabled={saving || uploading || faviconUploading}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    e.target.value = "";
+                    if (f) void onUploadFavicon(f);
+                  }}
+                />
+              </label>
+              {(faviconUrl || faviconPublicId) ?
+                <button
+                  type="button"
+                  className="inline-flex min-h-[44px] items-center rounded-xl border border-red-200 bg-white px-4 text-sm font-semibold text-red-700 transition hover:bg-red-50"
+                  disabled={saving || uploading || faviconUploading}
+                  onClick={() => void removeFavicon()}
+                >
+                  Remove favicon
+                </button>
+              : null}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <form onSubmit={saveSiteScripts} className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <h2 className="mb-2 text-lg font-bold text-navy">Site scripts &amp; tags</h2>
+        <p className="mb-4 text-sm text-gray-600">
+          Paste snippets from Google Tag Manager, analytics, or chat widgets. Content is injected on every
+          page for all visitors — only use sources you trust.
+        </p>
+        <div className="space-y-5">
+          <div>
+            <label htmlFor="inject_head" className="mb-1 block text-sm font-medium text-gray-700">
+              Inside <code className="rounded bg-gray-100 px-1">&lt;head&gt;</code>
+            </label>
+            <Textarea
+              id="inject_head"
+              value={injectHead}
+              onChange={(e) => setInjectHead(e.target.value)}
+              placeholder='e.g. GTM script, &lt;link rel="preconnect" ... /&gt;'
+              rows={6}
+              spellCheck={false}
+              className="min-h-[120px] font-mono text-sm"
+            />
+          </div>
+          <div>
+            <label htmlFor="inject_body_start" className="mb-1 block text-sm font-medium text-gray-700">
+              Start of <code className="rounded bg-gray-100 px-1">&lt;body&gt;</code> (after open tag)
+            </label>
+            <Textarea
+              id="inject_body_start"
+              value={injectBodyStart}
+              onChange={(e) => setInjectBodyStart(e.target.value)}
+              placeholder="e.g. GTM noscript iframe, accessibility widget bootstrap"
+              rows={5}
+              spellCheck={false}
+              className="min-h-[100px] font-mono text-sm"
+            />
+          </div>
+          <div>
+            <label htmlFor="inject_body_end" className="mb-1 block text-sm font-medium text-gray-700">
+              End of <code className="rounded bg-gray-100 px-1">&lt;body&gt;</code> (before close tag)
+            </label>
+            <Textarea
+              id="inject_body_end"
+              value={injectBodyEnd}
+              onChange={(e) => setInjectBodyEnd(e.target.value)}
+              placeholder="e.g. deferred analytics, chat widget script"
+              rows={6}
+              spellCheck={false}
+              className="min-h-[120px] font-mono text-sm"
+            />
+          </div>
+        </div>
+        <div className="mt-6">
+          <Button type="submit" disabled={saving}>
+            {saving ? "Saving…" : "Save scripts"}
+          </Button>
+        </div>
+      </form>
 
       <form onSubmit={saveTextFields} className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
         <h2 className="mb-4 text-lg font-bold text-navy">App, email & integrations</h2>

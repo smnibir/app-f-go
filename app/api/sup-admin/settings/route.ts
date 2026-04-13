@@ -19,6 +19,11 @@ export async function GET() {
       app_name: "FutureGo",
       logo_url: "",
       logo_public_id: "",
+      favicon_url: "",
+      favicon_public_id: "",
+      inject_head: "",
+      inject_body_start: "",
+      inject_body_end: "",
       from_email: "",
       sendgrid: { masked: "", configured: false },
       cloudinary_cloud_name: "",
@@ -36,6 +41,11 @@ export async function GET() {
     app_name: s.app_name,
     logo_url: s.logo_url || "",
     logo_public_id: s.logo_public_id || "",
+    favicon_url: s.favicon_url || "",
+    favicon_public_id: s.favicon_public_id || "",
+    inject_head: s.inject_head || "",
+    inject_body_start: s.inject_body_start || "",
+    inject_body_end: s.inject_body_end || "",
     from_email: s.from_email || "",
     sendgrid: { masked: sendgrid.masked, configured: sendgrid.configured },
     cloudinary_cloud_name: s.cloudinary_cloud_name || "",
@@ -107,6 +117,24 @@ export async function PATCH(req: Request) {
     if (body.logo_public_id !== undefined) await upsert("logo_public_id", nextPid);
   }
 
+  if (body.favicon_url !== undefined || body.favicon_public_id !== undefined) {
+    const prevPid = map.favicon_public_id || "";
+    const nextUrl = body.favicon_url !== undefined ? body.favicon_url : map.favicon_url || "";
+    const nextPid = body.favicon_public_id !== undefined ? body.favicon_public_id : prevPid;
+
+    if (prevPid && nextPid !== prevPid) {
+      if (await configureCloudinaryWithSettings()) {
+        await deleteCloudinaryAsset(prevPid, "image");
+      }
+    }
+    if (body.favicon_url !== undefined) await upsert("favicon_url", nextUrl);
+    if (body.favicon_public_id !== undefined) await upsert("favicon_public_id", nextPid);
+  }
+
+  if (body.inject_head !== undefined) await upsert("inject_head", body.inject_head);
+  if (body.inject_body_start !== undefined) await upsert("inject_body_start", body.inject_body_start);
+  if (body.inject_body_end !== undefined) await upsert("inject_body_end", body.inject_body_end);
+
   if (body.cloudinary_cloud_name !== undefined) {
     await upsert("cloudinary_cloud_name", body.cloudinary_cloud_name.trim());
   }
@@ -150,6 +178,11 @@ export async function PATCH(req: Request) {
       app_name: s.app_name,
       logo_url: s.logo_url || "",
       logo_public_id: s.logo_public_id || "",
+      favicon_url: s.favicon_url || "",
+      favicon_public_id: s.favicon_public_id || "",
+      inject_head: s.inject_head || "",
+      inject_body_start: s.inject_body_start || "",
+      inject_body_end: s.inject_body_end || "",
       from_email: s.from_email || "",
       sendgrid: { masked: sg.masked, configured: sg.configured },
       cloudinary_cloud_name: s.cloudinary_cloud_name || "",

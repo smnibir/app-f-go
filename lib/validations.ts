@@ -102,6 +102,8 @@ export const adminUserPatchSchema = z
     message: "No changes",
   });
 
+const htmlSnippet = z.string().max(100_000).optional();
+
 export const supAdminSettingsPatchSchema = z.object({
   app_name: z.string().min(1).max(200).optional(),
   from_email: z.string().email().optional(),
@@ -109,6 +111,12 @@ export const supAdminSettingsPatchSchema = z.object({
   sendgrid_api_key: z.string().optional(),
   logo_url: z.string().optional(),
   logo_public_id: z.string().optional(),
+  favicon_url: z.string().optional(),
+  favicon_public_id: z.string().optional(),
+  /** Raw markup for head (scripts, GTM, etc.). Only trusted admins. */
+  inject_head: htmlSnippet,
+  inject_body_start: htmlSnippet,
+  inject_body_end: htmlSnippet,
   cloudinary_cloud_name: z.string().max(200).optional(),
   cloudinary_api_key: z.string().optional(),
   cloudinary_api_secret: z.string().optional(),

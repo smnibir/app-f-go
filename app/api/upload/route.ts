@@ -13,7 +13,7 @@ export async function POST(req: Request) {
   const file = form.get("file");
   const purpose = (form.get("purpose") as string | null) || "timeline";
 
-  if (purpose === "branding") {
+  if (purpose === "branding" || purpose === "favicon") {
     const role = session.user.role;
     if (role !== "ADMIN" && role !== "SUPER_ADMIN") {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -46,10 +46,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Logo must be an image (JPG or PNG)" }, { status: 400 });
   }
 
+  if (purpose === "favicon" && classified.type !== "IMAGE") {
+    return NextResponse.json(
+      { error: "Favicon must be an image (PNG, JPG, WebP, GIF, or ICO)" },
+      { status: 400 }
+    );
+  }
+
   const buffer = Buffer.from(await file.arrayBuffer());
   const folder =
     purpose === "avatar" ? "futurego/avatars"
-    : purpose === "branding" ? "futurego/branding"
+    : purpose === "branding" || purpose === "favicon" ? "futurego/branding"
     : "futurego/timeline";
 
   const uploadOptions: Record<string, string | boolean> = {
