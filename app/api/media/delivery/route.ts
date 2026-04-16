@@ -15,15 +15,40 @@ function resourceTypeForAsset(t: AssetType): "image" | "video" | "raw" {
   }
 }
 
+type CloudinaryDeliveryParts = {
+  publicId: string;
+  version: number;
+  resourceType: "image" | "video" | "raw";
+};
+
 /**
- * Cloudinary Node `url()` defaults foldered public_ids to `v1` when version is omitted.
- * Real uploads use a version segment (e.g. v1776370454). Signing with the wrong version
- * yields 401 on strict accounts — especially noticeable for raw/PDF.
+ * Parse canonical delivery path from a stored secure_url.
+ * Prefer this over DB `publicId` alone — mismatches (encoding, suffix, folder) cause signed
+ * URLs to point at the wrong object → Cloudinary "Not found" (common for raw/PDF).
+ *
+ * Path shape: `https://res.cloudinary.com/{cloud}/(image|video|raw)/upload/v{version}/{public_id...}`
  */
-function versionFromCloudinaryDeliveryUrl(url: string): number | undefined {
-  const m = url.match(/\/(?:image|video|raw)\/upload\/v(\d+)\//);
-  if (!m) return undefined;
-  return parseInt(m[1], 10);
+function parseCloudinaryDeliveryUrl(urlStr: string): CloudinaryDeliveryParts | null {
+  try {
+    const u = new URL(urlStr);
+    if (!u.hostname.endsWith("cloudinary.com")) return null;
+    const parts = u.pathname.split("/").filter(Boolean);
+    // [cloudName, image|video|raw, upload, vNNN, ...publicId]
+    if (parts.length < 5) return null;
+    const resourceType = parts[1];
+    if (resourceType !== "image" && resourceType !== "video" && resourceType !== "raw") {
+      return null;
+    }
+    if (parts[2] !== "upload") return null;
+    const vSeg = parts[3];
+    if (!/^v\d+$/.test(vSeg)) return null;
+    const version = parseInt(vSeg.slice(1), 10);
+    const publicId = decodeURIComponent(parts.slice(4).join("/"));
+    if (!publicId) return null;
+    return { publicId, version, resourceType };
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -60,12 +85,21 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Not configured" }, { status: 500 });
   }
 
-  const version = versionFromCloudinaryDeliveryUrl(asset.url);
-  const url = cloudinary.url(asset.publicId, {
+  const parsed = parseCloudinaryDeliveryUrl(asset.url);
+  const resourceType = parsed?.resourceType ?? resourceTypeForAsset(asset.type);
+  const publicId = parsed?.publicId ?? asset.publicId;
+  const version = parsed?.version;
+
+  const url = cloudinary.url(publicId, {
     secure: true,
     sign_url: true,
-    resource_type: resourceTypeForAsset(asset.type),
-    ...(version != null ? { version } : {}),
+    resource_type: resourceType,
+    type: "upload",
+    /** Appends `_a=`; can break strict signed delivery on some accounts. */
+    urlAnalytics: false,
+    ...(version != null ?
+      { version, force_version: true }
+    : { force_version: false }),
   });
 
   return NextResponse.json({ url });
