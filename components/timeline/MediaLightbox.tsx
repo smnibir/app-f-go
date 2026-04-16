@@ -35,6 +35,41 @@ export function MediaLightbox({
   const current = list[idx];
   const hasNav = list.length > 1;
 
+  const [deliveryUrl, setDeliveryUrl] = useState<string | null>(null);
+  const [deliveryError, setDeliveryError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open || !current) return;
+    const needsSigned = current.url.includes("res.cloudinary.com");
+    if (!needsSigned) {
+      setDeliveryUrl(current.url);
+      setDeliveryError(null);
+      return;
+    }
+    let cancelled = false;
+    setDeliveryUrl(null);
+    setDeliveryError(null);
+    (async () => {
+      try {
+        const r = await fetch(
+          `/api/media/delivery?assetId=${encodeURIComponent(current.id)}`
+        );
+        const data: { url?: string; error?: string } = await r.json();
+        if (cancelled) return;
+        if (!r.ok) throw new Error(data.error || "Could not load media");
+        if (!data.url) throw new Error("Missing URL");
+        setDeliveryUrl(data.url);
+      } catch (e) {
+        if (!cancelled) {
+          setDeliveryError(e instanceof Error ? e.message : "Could not load media");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, current?.id, current?.url]);
+
   function go(delta: number) {
     setIdx((i) => (i + delta + list.length) % list.length);
   }
@@ -107,17 +142,22 @@ export function MediaLightbox({
               </>
             : null}
 
-            {current.type === "IMAGE" ?
+            {deliveryError ?
+              <p className="px-4 text-center text-sm text-red-400">{deliveryError}</p>
+            : deliveryUrl === null ?
+              <p className="text-sm text-white/60">Loading…</p>
+            : current.type === "IMAGE" ?
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={current.url}
+                key={current.id}
+                src={deliveryUrl}
                 alt=""
                 className="max-h-[min(78vh,820px)] max-w-full object-contain"
               />
             : current.type === "VIDEO" ?
               <video
                 key={current.id}
-                src={current.url}
+                src={deliveryUrl}
                 controls
                 playsInline
                 className="max-h-[min(78vh,820px)] w-full max-w-full rounded-lg"
@@ -126,14 +166,14 @@ export function MediaLightbox({
             : current.type === "AUDIO" ?
               <div className="flex w-full max-w-md flex-col items-center gap-4 p-8">
                 <p className="text-center text-sm text-white/70">Audio</p>
-                <audio key={current.id} src={current.url} controls className="w-full" preload="metadata" />
+                <audio key={current.id} src={deliveryUrl} controls className="w-full" preload="metadata" />
               </div>
             : (
               <div className="relative h-[min(78vh,820px)] w-full min-h-[280px] flex-1">
                 <iframe
                   key={current.id}
                   title={current.filename || "PDF"}
-                  src={current.url}
+                  src={deliveryUrl}
                   className="absolute inset-0 h-full w-full rounded-lg border-0 bg-white"
                 />
               </div>
