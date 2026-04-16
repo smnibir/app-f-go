@@ -43,6 +43,8 @@ export async function uploadTimelineFileDirect(
     folder?: string;
     resourceType?: string;
     assetType?: AssetType;
+    /** Present for raw (PDF, audio): must be sent as `public_id` (matches signature). */
+    publicId?: string;
   };
 
   if (!sigRes.ok) {
@@ -70,8 +72,13 @@ export async function uploadTimelineFileDirect(
   fd.append("timestamp", String(sig.timestamp));
   fd.append("signature", sig.signature);
   fd.append("folder", sig.folder);
-  fd.append("use_filename", "true");
-  fd.append("unique_filename", "true");
+  if (sig.publicId) {
+    fd.append("public_id", sig.publicId);
+    fd.append("unique_filename", "true");
+  } else {
+    fd.append("use_filename", "true");
+    fd.append("unique_filename", "true");
+  }
 
   const endpoint = `https://api.cloudinary.com/v1_1/${sig.cloudName}/${sig.resourceType}/upload`;
 

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { cloudinary, configureCloudinaryWithSettings } from "@/lib/cloudinary";
 import { classifyUpload, MAX_UPLOAD_BYTES } from "@/lib/asset-types";
+import { cloudinaryPublicIdBaseFromFilename } from "@/lib/cloudinary-public-id";
 import { getAppSettings } from "@/lib/settings";
 
 /**
@@ -65,13 +66,25 @@ export async function POST(req: Request) {
     : "futurego/timeline";
 
   const timestamp = Math.round(Date.now() / 1000);
-  /** Must match FormData string values — preserves original filename + extension on Cloudinary (esp. raw/PDF). */
-  const paramsToSign: Record<string, string | number> = {
-    timestamp,
-    folder,
-    use_filename: "true",
-    unique_filename: "true",
-  };
+  /**
+   * Raw (PDF, MP3): set explicit `public_id` so the extension is kept on Cloudinary.
+   * Image/video: `use_filename` + `unique_filename` (Cloudinary image public_ids usually omit ext).
+   */
+  const isRaw = classified.resourceType === "raw";
+  const rawPublicId = isRaw ? cloudinaryPublicIdBaseFromFilename(filename) : "";
+  const paramsToSign: Record<string, string | number> = isRaw ?
+    {
+      timestamp,
+      folder,
+      public_id: rawPublicId,
+      unique_filename: "true",
+    }
+  : {
+      timestamp,
+      folder,
+      use_filename: "true",
+      unique_filename: "true",
+    };
 
   const signature = cloudinary.utils.api_sign_request(paramsToSign, apiSecret);
 
@@ -83,5 +96,6 @@ export async function POST(req: Request) {
     folder,
     resourceType: classified.resourceType,
     assetType: classified.type,
+    ...(isRaw ? { publicId: rawPublicId } : {}),
   });
 }

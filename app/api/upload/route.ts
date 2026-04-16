@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { configureCloudinaryWithSettings, cloudinary } from "@/lib/cloudinary";
+import { cloudinaryPublicIdBaseFromFilename } from "@/lib/cloudinary-public-id";
 import { classifyUpload, MAX_UPLOAD_BYTES } from "@/lib/asset-types";
 
 export async function POST(req: Request) {
@@ -59,12 +60,20 @@ export async function POST(req: Request) {
     : purpose === "branding" || purpose === "favicon" ? "futurego/branding"
     : "futurego/timeline";
 
-  const uploadOptions: Record<string, string | boolean> = {
-    folder,
-    resource_type: classified.resourceType,
-    use_filename: true,
-    unique_filename: true,
-  };
+  const uploadOptions: Record<string, string | boolean> =
+    classified.resourceType === "raw" ?
+      {
+        folder,
+        resource_type: classified.resourceType,
+        public_id: cloudinaryPublicIdBaseFromFilename(file.name),
+        unique_filename: true,
+      }
+    : {
+        folder,
+        resource_type: classified.resourceType,
+        use_filename: true,
+        unique_filename: true,
+      };
 
   const result = await new Promise<{
     secure_url: string;
