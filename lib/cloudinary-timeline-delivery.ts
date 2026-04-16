@@ -1,6 +1,8 @@
 import type { AssetType } from "@prisma/client";
 import { configureCloudinaryWithSettings, cloudinary } from "@/lib/cloudinary";
 
+type AssetLike = { publicId: string; type: AssetType; url: string };
+
 export function resourceTypeForAsset(t: AssetType): "image" | "video" | "raw" {
   switch (t) {
     case "IMAGE":
@@ -44,10 +46,8 @@ export function parseCloudinaryDeliveryUrl(urlStr: string): CloudinaryDeliveryPa
   }
 }
 
-type AssetLike = { publicId: string; type: AssetType; url: string };
-
 /**
- * Signed HTTPS URL for Cloudinary delivery (images/videos/audio/PDF when needed as direct URL).
+ * Signed **CDN** URL (`res.cloudinary.com/.../s--…`) for browsers (img/video/audio).
  */
 export async function buildSignedCloudinaryUrl(asset: AssetLike): Promise<string | null> {
   if (!asset.url.includes("res.cloudinary.com")) return null;
@@ -61,8 +61,6 @@ export async function buildSignedCloudinaryUrl(asset: AssetLike): Promise<string
   return cloudinary.url(publicId, {
     secure: true,
     sign_url: true,
-    /** Stricter accounts (common for `raw`/PDF) require SHA-256 signatures; short `s--` URLs can 401. */
-    long_url_signature: true,
     resource_type: resourceType,
     type: "upload",
     urlAnalytics: false,
@@ -70,4 +68,28 @@ export async function buildSignedCloudinaryUrl(asset: AssetLike): Promise<string
       { version, force_version: true }
     : { force_version: false }),
   });
+}
+
+/**
+ * Authenticated **Admin API** download URL (`api.cloudinary.com/v1_1/.../raw/download?...`).
+ * Use for **server-side** PDF streaming: CDN signed URLs often return **401** to non-browser fetches
+ * when strict delivery is enabled; API downloads are signed with `api_key` + `signature` (upload API rules).
+ */
+export async function buildRawPrivateDownloadUrl(asset: AssetLike): Promise<string | null> {
+  if (!asset.url.includes("res.cloudinary.com")) return null;
+  if (!(await configureCloudinaryWithSettings())) return null;
+
+  const parsed = parseCloudinaryDeliveryUrl(asset.url);
+  const publicId = parsed?.publicId ?? asset.publicId;
+
+  // Second arg is image `format`; omit for raw (SDK omits blank params from the signature).
+  return cloudinary.utils.private_download_url(
+    publicId,
+    // @ts-expect-error Cloudinary allows omitting format for raw downloads
+    undefined,
+    {
+      resource_type: "raw",
+      type: "upload",
+    }
+  );
 }

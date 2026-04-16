@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { buildSignedCloudinaryUrl } from "@/lib/cloudinary-timeline-delivery";
+import { buildRawPrivateDownloadUrl } from "@/lib/cloudinary-timeline-delivery";
 
 /** Avoid Next.js Data Cache reusing a failed Cloudinary response for the same signed URL. */
 export const dynamic = "force-dynamic";
@@ -45,13 +45,14 @@ export async function GET(req: Request) {
     return NextResponse.redirect(asset.url, 302);
   }
 
-  const signedUrl = await buildSignedCloudinaryUrl(asset);
-  if (!signedUrl) {
+  /** Authenticated API download — not CDN `s--` URL (those often 401 on server `fetch` under strict delivery). */
+  const downloadUrl = await buildRawPrivateDownloadUrl(asset);
+  if (!downloadUrl) {
     return NextResponse.json({ error: "Not configured" }, { status: 500 });
   }
 
   const range = req.headers.get("range");
-  const upstream = await fetch(signedUrl, {
+  const upstream = await fetch(downloadUrl, {
     cache: "no-store",
     redirect: "follow",
     headers: {
@@ -65,7 +66,7 @@ export async function GET(req: Request) {
     const snippet = (await upstream.text()).slice(0, 120).replace(/\s+/g, " ");
     console.error("[media/pdf] Cloudinary upstream failed", {
       status: upstream.status,
-      signedUrlPrefix: signedUrl.slice(0, 80),
+      urlPrefix: downloadUrl.split("?")[0]?.slice(0, 96),
       bodySnippet: snippet,
     });
     return NextResponse.json(
