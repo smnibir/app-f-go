@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
-import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, ExternalLink, X } from "lucide-react";
 import type { Asset } from "@prisma/client";
 import { cn } from "@/lib/utils";
 
@@ -169,13 +169,51 @@ export function MediaLightbox({
                 <audio key={current.id} src={deliveryUrl} controls className="w-full" preload="metadata" />
               </div>
             : (
-              <div className="relative h-[min(78vh,820px)] w-full min-h-[280px] flex-1">
-                <iframe
-                  key={current.id}
-                  title={current.filename || "PDF"}
-                  src={deliveryUrl}
-                  className="absolute inset-0 h-full w-full rounded-lg border-0 bg-white"
-                />
+              <div
+                key={current.id}
+                className="flex h-[min(78vh,820px)] w-full min-h-[280px] flex-1 flex-col items-center justify-center gap-4 px-6 py-12"
+              >
+                <svg
+                  className="h-16 w-16 shrink-0 text-red-500/90"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                  aria-hidden
+                >
+                  <path
+                    d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"
+                    fill="currentColor"
+                    fillOpacity="0.15"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M14 2v6h6"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M9.5 17.5h5M9.5 14.5h5M9.5 11.5h2.5"
+                    stroke="currentColor"
+                    strokeWidth="1.25"
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <p className="max-w-[min(90vw,480px)] truncate text-center text-sm font-medium text-white/90">
+                  {current.filename || "PDF"}
+                </p>
+                <a
+                  href={deliveryUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-white/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3b82f6]"
+                >
+                  <ExternalLink className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
+                  Open PDF
+                </a>
+                <p className="text-xs text-white/50">Opens in a new tab</p>
               </div>
             )}
           </div>
