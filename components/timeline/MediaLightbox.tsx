@@ -4,8 +4,31 @@ import { useEffect, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import type { Asset } from "@prisma/client";
-import { cloudinaryAttachmentDeliveryUrl } from "@/lib/cloudinary-delivery";
 import { cn } from "@/lib/utils";
+
+function pdfDownloadFilename(stored: string | null): string {
+  const t = stored?.trim();
+  if (!t) return "document.pdf";
+  return /\.[a-z0-9]{2,8}$/i.test(t) ? t : `${t}.pdf`;
+}
+
+async function downloadPdfFromUrl(url: string, filename: string) {
+  try {
+    const res = await fetch(url, { mode: "cors" });
+    if (!res.ok) throw new Error("fetch failed");
+    const blob = await res.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = objectUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(objectUrl);
+  } catch {
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+}
 
 type MediaAsset = Asset & { type: "IMAGE" | "VIDEO" | "AUDIO" | "PDF" };
 
@@ -55,14 +78,6 @@ export function MediaLightbox({
   }, [open, list.length]);
 
   if (!current) return null;
-
-  const pdfHref =
-    current.type === "PDF" && current.url.includes("res.cloudinary.com") ?
-      cloudinaryAttachmentDeliveryUrl(
-        current.url,
-        /\.[a-z0-9]{2,8}$/i.test(current.filename) ? current.filename : `${current.filename || "document"}.pdf`
-      )
-    : current.url;
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -140,14 +155,25 @@ export function MediaLightbox({
             : (
               <div className="flex flex-col items-center gap-4 p-8 text-center">
                 <p className="text-white/80">PDF document</p>
-                <a
-                  href={pdfHref}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="rounded-xl bg-[#0056b3] px-6 py-3 text-sm font-semibold text-white hover:bg-[#004a9c]"
-                >
-                  Open PDF in new tab
-                </a>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <a
+                    href={current.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="rounded-xl bg-[#0056b3] px-6 py-3 text-sm font-semibold text-white hover:bg-[#004a9c]"
+                  >
+                    Open PDF in new tab
+                  </a>
+                  <button
+                    type="button"
+                    className="rounded-xl border border-white/25 bg-white/10 px-6 py-3 text-sm font-semibold text-white hover:bg-white/15"
+                    onClick={() =>
+                      void downloadPdfFromUrl(current.url, pdfDownloadFilename(current.filename))
+                    }
+                  >
+                    Download
+                  </button>
+                </div>
               </div>
             )}
           </div>
