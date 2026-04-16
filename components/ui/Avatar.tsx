@@ -30,6 +30,7 @@ export function Avatar({
   if (src) {
     return (
       <Image
+        key={src}
         src={src}
         alt=""
         width={size}

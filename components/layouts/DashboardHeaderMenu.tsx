@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
-import { signOut } from "next-auth/react";
+import { signOut, useSession } from "next-auth/react";
 import { ChevronDown } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 
@@ -16,10 +16,13 @@ export function DashboardHeaderMenu({
     avatarUrl?: string | null;
   };
 }) {
+  const { data: clientSession } = useSession();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const email = user.email || "";
   const display = user.name || email;
+  const avatarSrc =
+    clientSession?.user?.avatarUrl ?? user.avatarUrl ?? user.image ?? null;
 
   useEffect(() => {
     function onDoc(e: MouseEvent) {
@@ -37,7 +40,7 @@ export function DashboardHeaderMenu({
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
       >
-        <Avatar src={user.avatarUrl || user.image} name={user.name} email={email} size={44} />
+        <Avatar src={avatarSrc} name={user.name} email={email} size={44} />
         <span className="hidden max-w-[160px] truncate text-base font-medium text-navy sm:inline">
           {display}
         </span>

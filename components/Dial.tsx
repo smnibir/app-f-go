@@ -1,19 +1,10 @@
 "use client";
 
 import { useRouter, usePathname } from "next/navigation";
-import { useRef, useState } from "react";
-import {
-  Waypoints,
-  Upload,
-  Trees,
-  Home,
-  Lock,
-  Camera,
-  Loader2,
-} from "lucide-react";
+import { useState } from "react";
+import { Waypoints, Upload, Trees, Home, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { postFormDataWithProgress } from "@/lib/upload-xhr";
-import { Avatar } from "@/components/ui/Avatar";
+import { ProfileAvatarUpload } from "@/components/profile/ProfileAvatarUpload";
 
 type Props = {
   user: {
@@ -82,37 +73,8 @@ function activeSegmentIndex(pathname: string): number | null {
 export function Dial({ user }: Props) {
   const router = useRouter();
   const pathname = usePathname();
-  const fileRef = useRef<HTMLInputElement>(null);
   const [hovered, setHovered] = useState<number | null>(null);
-  const [avatarUploading, setAvatarUploading] = useState(false);
-  const [avatarUploadPct, setAvatarUploadPct] = useState(0);
   const routeActive = activeSegmentIndex(pathname ?? "");
-
-  async function onAvatarFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    setAvatarUploading(true);
-    setAvatarUploadPct(0);
-    try {
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("purpose", "avatar");
-      const { ok, data } = await postFormDataWithProgress("/api/upload", fd, (pct) =>
-        setAvatarUploadPct(pct)
-      );
-      const payload = data as { url?: string; publicId?: string; error?: string };
-      if (!ok || !payload.url || !payload.publicId) return;
-      await fetch("/api/user/avatar", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ avatarUrl: payload.url, avatarPublicId: payload.publicId }),
-      });
-      router.refresh();
-    } finally {
-      setAvatarUploading(false);
-    }
-  }
 
   return (
     <div className="flex flex-col items-center justify-center px-4 py-8 md:py-12">
@@ -189,37 +151,7 @@ export function Dial({ user }: Props) {
 
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <div className="pointer-events-auto flex flex-col items-center gap-2">
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
-              disabled={avatarUploading}
-              className="relative flex h-[128px] w-[128px] flex-col items-center justify-center gap-2 rounded-full bg-white shadow-sm outline-none transition hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-[#0056b3]/35 focus-visible:ring-offset-2 disabled:opacity-75"
-              aria-label="Upload your photo"
-            >
-              {avatarUploading ?
-                <>
-                  <Loader2 className="h-10 w-10 animate-spin text-[#0056b3]" aria-hidden />
-                  <span className="px-1 text-center text-[13px] font-semibold tabular-nums text-[#0056b3]">
-                    {avatarUploadPct}%
-                  </span>
-                </>
-              : user.avatarUrl ?
-                <Avatar src={user.avatarUrl} name={user.name} email={user.email} size={120} />
-              : <>
-                  <Camera className="h-10 w-10 text-[#0056b3]" strokeWidth={1.5} />
-                  <span className="px-2 text-center text-[15px] font-semibold leading-snug text-[#0056b3]">
-                    Upload your photo
-                  </span>
-                </>
-              }
-            </button>
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              className="hidden"
-              onChange={(e) => void onAvatarFile(e)}
-            />
+            <ProfileAvatarUpload variant="dial" user={user} />
           </div>
         </div>
       </div>

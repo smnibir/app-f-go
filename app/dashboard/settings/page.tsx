@@ -7,10 +7,9 @@ import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { useToast } from "@/components/ui/Toaster";
 import { useSearchParams } from "next/navigation";
-import { Avatar } from "@/components/ui/Avatar";
-import { Camera, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { postFormDataWithProgress } from "@/lib/upload-xhr";
+import { ProfileAvatarUpload } from "@/components/profile/ProfileAvatarUpload";
 
 type Profile = {
   name: string | null;
@@ -39,8 +38,6 @@ export default function SettingsPage() {
   const [npw2, setNpw2] = useState("");
   const [loading, setLoading] = useState(false);
   const [profileLoading, setProfileLoading] = useState(true);
-  const [avatarBusy, setAvatarBusy] = useState(false);
-  const [avatarUploadPct, setAvatarUploadPct] = useState<number | null>(null);
 
   useEffect(() => {
     if (session?.user?.email) setEmail(session.user.email);
@@ -99,47 +96,6 @@ export default function SettingsPage() {
     }
     await update();
     toast({ title: "Profile saved" });
-  }
-
-  async function onAvatarFile(file: File) {
-    setAvatarBusy(true);
-    setAvatarUploadPct(0);
-    try {
-      const fd = new FormData();
-      fd.set("file", file);
-      fd.set("purpose", "avatar");
-      const { ok, data } = await postFormDataWithProgress("/api/upload", fd, (pct) =>
-        setAvatarUploadPct(pct)
-      );
-      const payload = data as { error?: string; url?: string; publicId?: string };
-      if (!ok) {
-        toast({
-          title: "Upload failed",
-          description: payload.error || "Try again.",
-          variant: "destructive",
-        });
-        return;
-      }
-      const patch = await fetch("/api/user/avatar", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ avatarUrl: payload.url, avatarPublicId: payload.publicId }),
-      });
-      if (!patch.ok) {
-        toast({ title: "Could not save photo", variant: "destructive" });
-        return;
-      }
-      setProfile((p) =>
-        p ?
-          { ...p, avatarUrl: payload.url!, avatarPublicId: payload.publicId! }
-        : p
-      );
-      await update();
-      toast({ title: "Photo updated" });
-    } finally {
-      setAvatarBusy(false);
-      setAvatarUploadPct(null);
-    }
   }
 
   async function sendEmailChange(e: React.FormEvent) {
@@ -203,57 +159,18 @@ export default function SettingsPage() {
               <p className="text-sm text-gray-500">Loading profile…</p>
             </div>
           : <>
-              <div className="mb-8 flex flex-col items-center gap-4 border-b border-gray-100 pb-8">
-                <div className="relative mx-auto">
-                  <div
-                    className={cn(
-                      "overflow-hidden rounded-full ring-2 ring-gray-100",
-                      avatarBusy && "opacity-60"
-                    )}
-                  >
-                    <Avatar
-                      src={displayAvatarUrl}
-                      name={name || session?.user?.name}
-                      email={email}
-                      size={96}
-                    />
-                  </div>
-                  <label
-                    className={cn(
-                      "absolute -bottom-1 -right-1 flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border border-gray-200 bg-white text-[#0056b3] shadow-md transition hover:bg-gray-50",
-                      avatarBusy && "pointer-events-none"
-                    )}
-                  >
-                    <Camera className="h-5 w-5" />
-                    <input
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp,image/gif"
-                      className="sr-only"
-                      disabled={avatarBusy}
-                      onChange={(e) => {
-                        const f = e.target.files?.[0];
-                        e.target.value = "";
-                        if (f) void onAvatarFile(f);
-                      }}
-                    />
-                    <span className="sr-only">Upload profile photo</span>
-                  </label>
-                </div>
-                {avatarBusy && avatarUploadPct !== null ?
-                  <div className="w-full max-w-[220px] px-2">
-                    <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200">
-                      <div
-                        className="h-full rounded-full bg-[#0056b3] transition-[width] duration-150"
-                        style={{ width: `${avatarUploadPct}%` }}
-                      />
-                    </div>
-                    <p className="mt-1 text-center text-xs text-gray-600">
-                      Uploading photo… {avatarUploadPct}%
-                    </p>
-                  </div>
-                : null}
-                <p className="text-center text-sm text-gray-500">Profile & contact details</p>
-              </div>
+              <ProfileAvatarUpload
+                variant="settings"
+                user={{
+                  email,
+                  name: session?.user?.name,
+                  avatarUrl: displayAvatarUrl,
+                }}
+                displayName={name || session?.user?.name}
+                onAvatarSaved={(next) =>
+                  setProfile((p) => (p ? { ...p, ...next } : p))
+                }
+              />
 
               <form onSubmit={saveProfile} className="flex flex-1 flex-col space-y-5">
                 <div>
