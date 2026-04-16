@@ -16,6 +16,17 @@ function resourceTypeForAsset(t: AssetType): "image" | "video" | "raw" {
 }
 
 /**
+ * Cloudinary Node `url()` defaults foldered public_ids to `v1` when version is omitted.
+ * Real uploads use a version segment (e.g. v1776370454). Signing with the wrong version
+ * yields 401 on strict accounts — especially noticeable for raw/PDF.
+ */
+function versionFromCloudinaryDeliveryUrl(url: string): number | undefined {
+  const m = url.match(/\/(?:image|video|raw)\/upload\/v(\d+)\//);
+  if (!m) return undefined;
+  return parseInt(m[1], 10);
+}
+
+/**
  * Signed Cloudinary delivery URL for timeline assets (strict / signed-URL accounts return 401 without this).
  */
 export async function GET(req: Request) {
@@ -49,10 +60,12 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Not configured" }, { status: 500 });
   }
 
+  const version = versionFromCloudinaryDeliveryUrl(asset.url);
   const url = cloudinary.url(asset.publicId, {
     secure: true,
     sign_url: true,
     resource_type: resourceTypeForAsset(asset.type),
+    ...(version != null ? { version } : {}),
   });
 
   return NextResponse.json({ url });
