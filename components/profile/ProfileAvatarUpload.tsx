@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Camera, Loader2 } from "lucide-react";
@@ -33,10 +33,16 @@ export function ProfileAvatarUpload({ variant, user, displayName, onAvatarSaved 
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [pct, setPct] = useState(0);
+  const sessionUrl = session?.user?.avatarUrl ?? undefined;
   /** Shown until PATCH + session.update() finishes so the new image appears immediately */
   const [pendingUrl, setPendingUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!pendingUrl) return;
+    if (sessionUrl === pendingUrl || user.avatarUrl === pendingUrl) {
+      setPendingUrl(null);
+    }
+  }, [pendingUrl, sessionUrl, user.avatarUrl]);
 
-  const sessionUrl = session?.user?.avatarUrl ?? undefined;
   const effectiveUrl = pendingUrl ?? sessionUrl ?? user.avatarUrl ?? undefined;
   const nameForAvatar = displayName ?? user.name;
   const email = user.email;
@@ -72,8 +78,7 @@ export function ProfileAvatarUpload({ variant, user, displayName, onAvatarSaved 
         setPendingUrl(payload.url);
         onAvatarSaved?.({ avatarUrl: payload.url, avatarPublicId: payload.publicId });
         await update();
-        setPendingUrl(null);
-        await router.refresh();
+        router.refresh();
         if (variant === "settings") {
           toast({ title: "Photo updated" });
         }
