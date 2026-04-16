@@ -3,7 +3,7 @@
 import { useCallback, useRef, useState } from "react";
 import { Upload, X, FileText, Music, Video, ImageIcon, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { postFormDataWithProgress } from "@/lib/upload-xhr";
+import { uploadTimelineFileDirect } from "@/lib/upload-cloudinary-direct";
 
 export type UploadedFile = {
   id: string;
@@ -47,38 +47,23 @@ export function FileUpload({ files, onAdd, onRemove, accept, disabled }: Props) 
           const id = crypto.randomUUID();
           setUploading((q) => [...q, { id, filename: file.name, progress: 0 }]);
 
-          const fd = new FormData();
-          fd.append("file", file);
-
           try {
-            const { ok, data } = await postFormDataWithProgress(
-              "/api/upload",
-              fd,
-              (pct) => {
-                setUploading((q) => q.map((u) => (u.id === id ? { ...u, progress: pct } : u)));
-              }
-            );
-            const res = data as { error?: string; publicId?: string; url?: string; type?: UploadedFile["type"]; filename?: string; size?: number };
-            if (!ok) {
+            const result = await uploadTimelineFileDirect(file, (pct) => {
+              setUploading((q) => q.map((u) => (u.id === id ? { ...u, progress: pct } : u)));
+            });
+            if (!result.ok) {
               setUploading((q) =>
-                q.map((u) =>
-                  u.id === id ? { ...u, progress: 0, error: res.error || "Upload failed" } : u
-                )
+                q.map((u) => (u.id === id ? { ...u, progress: 0, error: result.error } : u))
               );
               return;
             }
-            if (!res.publicId || !res.url || !res.type) {
-              setUploading((q) =>
-                q.map((u) => (u.id === id ? { ...u, progress: 0, error: "Invalid response" } : u))
-              );
-              return;
-            }
+            const res = result.data;
             onAdd({
               id: res.publicId,
               url: res.url,
               publicId: res.publicId,
               type: res.type,
-              filename: res.filename ?? file.name,
+              filename: res.filename,
               size: res.size,
             });
             setUploading((q) => q.filter((u) => u.id !== id));

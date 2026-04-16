@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import type { Asset } from "@prisma/client";
+import { cloudinaryAttachmentDeliveryUrl } from "@/lib/cloudinary-delivery";
 import { cn } from "@/lib/utils";
 
 type MediaAsset = Asset & { type: "IMAGE" | "VIDEO" | "AUDIO" | "PDF" };
@@ -54,6 +55,14 @@ export function MediaLightbox({
   }, [open, list.length]);
 
   if (!current) return null;
+
+  const pdfHref =
+    current.type === "PDF" && current.url.includes("res.cloudinary.com") ?
+      cloudinaryAttachmentDeliveryUrl(
+        current.url,
+        /\.[a-z0-9]{2,8}$/i.test(current.filename) ? current.filename : `${current.filename || "document"}.pdf`
+      )
+    : current.url;
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -132,7 +141,7 @@ export function MediaLightbox({
               <div className="flex flex-col items-center gap-4 p-8 text-center">
                 <p className="text-white/80">PDF document</p>
                 <a
-                  href={current.url}
+                  href={pdfHref}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="rounded-xl bg-[#0056b3] px-6 py-3 text-sm font-semibold text-white hover:bg-[#004a9c]"
