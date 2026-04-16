@@ -40,9 +40,15 @@ export function MediaLightbox({
 
   useEffect(() => {
     if (!open || !current) return;
+    /** PDFs open via same-origin `/api/media/pdf` (streams Cloudinary) — avoids Chrome frame errors on raw URLs. */
+    if (current.type === "PDF") {
+      setDeliveryError(null);
+      setDeliveryUrl(null);
+      return;
+    }
     const needsSigned = current.url.includes("res.cloudinary.com");
     if (!needsSigned) {
-      setDeliveryUrl(current.url);
+      setDeliveryUrl(null);
       setDeliveryError(null);
       return;
     }
@@ -68,7 +74,7 @@ export function MediaLightbox({
     return () => {
       cancelled = true;
     };
-  }, [open, current?.id, current?.url]);
+  }, [open, current?.id, current?.url, current?.type]);
 
   function go(delta: number) {
     setIdx((i) => (i + delta + list.length) % list.length);
@@ -89,6 +95,21 @@ export function MediaLightbox({
   }, [open, list.length]);
 
   if (!current) return null;
+
+  const isCloudinary = current.url.includes("res.cloudinary.com");
+  const pdfOpenHref =
+    current.type === "PDF" && isCloudinary ?
+      `/api/media/pdf?assetId=${encodeURIComponent(current.id)}`
+    : current.type === "PDF" ? current.url
+    : "";
+
+  const mediaSrc =
+    current.type === "PDF" ? null
+    : isCloudinary ? deliveryUrl
+    : current.url;
+
+  const loadingCloudinaryMedia =
+    current.type !== "PDF" && isCloudinary && deliveryUrl === null && !deliveryError;
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -144,20 +165,20 @@ export function MediaLightbox({
 
             {deliveryError ?
               <p className="px-4 text-center text-sm text-red-400">{deliveryError}</p>
-            : deliveryUrl === null ?
+            : loadingCloudinaryMedia ?
               <p className="text-sm text-white/60">Loading…</p>
             : current.type === "IMAGE" ?
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 key={current.id}
-                src={deliveryUrl}
+                src={mediaSrc!}
                 alt=""
                 className="max-h-[min(78vh,820px)] max-w-full object-contain"
               />
             : current.type === "VIDEO" ?
               <video
                 key={current.id}
-                src={deliveryUrl}
+                src={mediaSrc!}
                 controls
                 playsInline
                 className="max-h-[min(78vh,820px)] w-full max-w-full rounded-lg"
@@ -166,7 +187,7 @@ export function MediaLightbox({
             : current.type === "AUDIO" ?
               <div className="flex w-full max-w-md flex-col items-center gap-4 p-8">
                 <p className="text-center text-sm text-white/70">Audio</p>
-                <audio key={current.id} src={deliveryUrl} controls className="w-full" preload="metadata" />
+                <audio key={current.id} src={mediaSrc!} controls className="w-full" preload="metadata" />
               </div>
             : (
               <div
@@ -205,7 +226,7 @@ export function MediaLightbox({
                   {current.filename || "PDF"}
                 </p>
                 <a
-                  href={deliveryUrl}
+                  href={pdfOpenHref}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-white/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3b82f6]"
