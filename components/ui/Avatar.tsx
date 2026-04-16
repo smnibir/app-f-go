@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { cn } from "@/lib/utils";
 
 export function Avatar({
@@ -29,14 +28,17 @@ export function Avatar({
 
   if (src) {
     return (
-      <Image
+      // eslint-disable-next-line @next/next/no-img-element -- avoid Next/Image caching; profile URLs must always reflect latest upload
+      <img
         key={src}
         src={src}
         alt=""
         width={size}
         height={size}
         className={cn("rounded-full object-cover", className)}
-        unoptimized
+        loading="eager"
+        decoding="async"
+        referrerPolicy="no-referrer"
       />
     );
   }

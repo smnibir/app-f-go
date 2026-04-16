@@ -9,10 +9,13 @@ export const authCallbacks = {
     token,
     user,
     trigger,
+    session,
   }: {
     token: JWT;
     user?: User;
     trigger?: "signIn" | "signUp" | "update";
+    /** Passed from `update({ user: { ... } })` — Auth.js merges this before re-encoding the JWT */
+    session?: unknown;
   }) {
     if (user) {
       const u = user as {
@@ -25,6 +28,18 @@ export const authCallbacks = {
       token.role = u.role;
       token.avatarUrl = u.avatarUrl ?? null;
       token.impersonatingFrom = u.impersonatingFrom ?? null;
+    }
+    if (trigger === "update" && session && typeof session === "object" && session !== null) {
+      const s = session as {
+        user?: {
+          avatarUrl?: string | null;
+          name?: string | null;
+          email?: string | null;
+        };
+      };
+      if (s.user?.avatarUrl !== undefined) token.avatarUrl = s.user.avatarUrl;
+      if (s.user?.name !== undefined) token.name = s.user.name;
+      if (s.user?.email !== undefined) token.email = s.user.email;
     }
     if (trigger === "update") {
       const uid = (token.id as string | undefined) || (token.sub as string | undefined);
@@ -44,7 +59,8 @@ export const authCallbacks = {
   },
   async session({ session, token }: { session: Session; token: JWT }) {
     if (session.user) {
-      session.user.id = token.id as string;
+      const id = (token.id as string | undefined) || (token.sub as string | undefined);
+      if (id) session.user.id = String(id);
       session.user.role = token.role as Role;
       session.user.avatarUrl = (token.avatarUrl as string | null) ?? null;
       session.user.impersonatingFrom = (token.impersonatingFrom as string | null) ?? null;

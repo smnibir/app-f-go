@@ -69,15 +69,29 @@ export function ProfileAvatarUpload({ variant, user, displayName, onAvatarSaved 
         const patch = await fetch("/api/user/avatar", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
+          credentials: "include",
           body: JSON.stringify({ avatarUrl: payload.url, avatarPublicId: payload.publicId }),
         });
+        const saved = (await patch.json().catch(() => ({}))) as {
+          ok?: boolean;
+          error?: string;
+          issues?: unknown;
+          avatarUrl?: string;
+          avatarPublicId?: string;
+        };
         if (!patch.ok) {
-          toast({ title: "Could not save photo", variant: "destructive" });
+          const desc =
+            typeof saved.error === "string" ? saved.error
+            : saved.issues ? JSON.stringify(saved.issues)
+            : patch.statusText;
+          toast({ title: "Could not save photo", description: desc, variant: "destructive" });
           return;
         }
-        setPendingUrl(payload.url);
-        onAvatarSaved?.({ avatarUrl: payload.url, avatarPublicId: payload.publicId });
-        await update();
+        const nextUrl = saved.avatarUrl ?? payload.url;
+        const nextPid = saved.avatarPublicId ?? payload.publicId;
+        setPendingUrl(nextUrl);
+        onAvatarSaved?.({ avatarUrl: nextUrl, avatarPublicId: nextPid });
+        await update({ user: { avatarUrl: nextUrl } });
         router.refresh();
         if (variant === "settings") {
           toast({ title: "Photo updated" });
