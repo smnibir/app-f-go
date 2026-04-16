@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import {
   addMonths,
   eachDayOfInterval,
@@ -9,11 +9,28 @@ import {
   format,
   isSameDay,
   isSameMonth,
+  setMonth,
+  setYear,
   startOfMonth,
   startOfWeek,
 } from "date-fns";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+const MONTH_NAMES = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+] as const;
 
 type Props = {
   value: Date;
@@ -25,11 +42,19 @@ type Props = {
 };
 
 export function DatePicker({ value, onChange, minYear = 1900, maxYear = 2100, compact = false }: Props) {
+  const monthSelectId = useId();
+  const yearSelectId = useId();
   const [view, setView] = useState(() => startOfMonth(value));
 
   useEffect(() => {
     setView(startOfMonth(value));
   }, [value]);
+
+  const yearsDesc = useMemo(() => {
+    const out: number[] = [];
+    for (let y = maxYear; y >= minYear; y--) out.push(y);
+    return out;
+  }, [minYear, maxYear]);
 
   const days = useMemo(() => {
     const start = startOfWeek(startOfMonth(view));
@@ -42,23 +67,64 @@ export function DatePicker({ value, onChange, minYear = 1900, maxYear = 2100, co
 
   return (
     <div className={cn("rounded-xl border border-gray-200 bg-white", compact ? "p-3 sm:p-4" : "p-4")}>
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex w-full items-center gap-2">
         <button
           type="button"
           aria-label="Previous month"
           disabled={!canPrev}
           onClick={() => setView((v) => addMonths(v, -1))}
-          className="flex min-h-[48px] min-w-[48px] items-center justify-center rounded-lg border border-gray-200 text-navy disabled:opacity-40"
+          className="flex min-h-[48px] min-w-[44px] shrink-0 items-center justify-center rounded-lg border border-gray-200 text-navy disabled:opacity-40"
         >
           <ChevronLeft className="h-6 w-6" />
         </button>
-        <p className="text-lg font-semibold text-navy">{format(view, "MMMM yyyy")}</p>
+        <label htmlFor={monthSelectId} className="sr-only">
+          Month
+        </label>
+        <select
+          id={monthSelectId}
+          value={view.getMonth()}
+          onChange={(e) => {
+            const m = Number.parseInt(e.target.value, 10);
+            setView((v) => startOfMonth(setMonth(v, m)));
+          }}
+          className={cn(
+            "min-h-[44px] min-w-0 flex-1 cursor-pointer rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm font-semibold text-navy shadow-sm sm:px-3 sm:text-base",
+            "focus:border-[#0056b3] focus:outline-none focus:ring-2 focus:ring-[#0056b3]/25"
+          )}
+        >
+          {MONTH_NAMES.map((name, i) => (
+            <option key={name} value={i}>
+              {name}
+            </option>
+          ))}
+        </select>
+        <label htmlFor={yearSelectId} className="sr-only">
+          Year
+        </label>
+        <select
+          id={yearSelectId}
+          value={view.getFullYear()}
+          onChange={(e) => {
+            const y = Number.parseInt(e.target.value, 10);
+            setView((v) => startOfMonth(setYear(v, y)));
+          }}
+          className={cn(
+            "min-h-[44px] w-[4.75rem] shrink-0 cursor-pointer rounded-lg border border-gray-200 bg-white px-2 py-2 text-center text-sm font-semibold text-navy tabular-nums shadow-sm sm:w-[5.5rem] sm:text-base",
+            "focus:border-[#0056b3] focus:outline-none focus:ring-2 focus:ring-[#0056b3]/25"
+          )}
+        >
+          {yearsDesc.map((y) => (
+            <option key={y} value={y}>
+              {y}
+            </option>
+          ))}
+        </select>
         <button
           type="button"
           aria-label="Next month"
           disabled={!canNext}
           onClick={() => setView((v) => addMonths(v, 1))}
-          className="flex min-h-[48px] min-w-[48px] items-center justify-center rounded-lg border border-gray-200 text-navy disabled:opacity-40"
+          className="flex min-h-[48px] min-w-[44px] shrink-0 items-center justify-center rounded-lg border border-gray-200 text-navy disabled:opacity-40"
         >
           <ChevronRight className="h-6 w-6" />
         </button>
