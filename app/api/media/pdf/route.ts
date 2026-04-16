@@ -3,6 +3,10 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { buildSignedCloudinaryUrl } from "@/lib/cloudinary-timeline-delivery";
 
+/** Avoid Next.js Data Cache reusing a failed Cloudinary response for the same signed URL. */
+export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
+
 function safeFilename(name: string): string {
   return name.replace(/[/\\?%*:|"<>]/g, "_").slice(0, 200) || "document.pdf";
 }
@@ -48,12 +52,28 @@ export async function GET(req: Request) {
 
   const range = req.headers.get("range");
   const upstream = await fetch(signedUrl, {
-    ...(range ? { headers: { Range: range } } : {}),
+    cache: "no-store",
+    redirect: "follow",
+    headers: {
+      ...(range ? { Range: range } : {}),
+      Accept: "application/pdf,*/*",
+      "User-Agent": "FutureGo-PdfProxy/1.0",
+    },
   });
 
   if (!upstream.ok && upstream.status !== 206) {
+    const snippet = (await upstream.text()).slice(0, 120).replace(/\s+/g, " ");
+    console.error("[media/pdf] Cloudinary upstream failed", {
+      status: upstream.status,
+      signedUrlPrefix: signedUrl.slice(0, 80),
+      bodySnippet: snippet,
+    });
     return NextResponse.json(
-      { error: "Could not load PDF" },
+      {
+        error: "Could not load PDF",
+        upstreamStatus: upstream.status,
+        ...(process.env.NODE_ENV === "development" ? { detail: snippet } : {}),
+      },
       { status: upstream.status >= 400 && upstream.status < 600 ? upstream.status : 502 }
     );
   }

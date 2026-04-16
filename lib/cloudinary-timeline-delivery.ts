@@ -61,6 +61,8 @@ export async function buildSignedCloudinaryUrl(asset: AssetLike): Promise<string
   return cloudinary.url(publicId, {
     secure: true,
     sign_url: true,
+    /** Stricter accounts (common for `raw`/PDF) require SHA-256 signatures; short `s--` URLs can 401. */
+    long_url_signature: true,
     resource_type: resourceType,
     type: "upload",
     urlAnalytics: false,
