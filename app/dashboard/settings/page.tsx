@@ -2,15 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
+import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { useToast } from "@/components/ui/Toaster";
 import { useSearchParams } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { Loader2, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ProfileAvatarUpload } from "@/components/profile/ProfileAvatarUpload";
-import { DialCoverProvider, DialCoverSettingsCard } from "@/components/DialCoverPanel";
+import { DialCoverProvider, useDialCover } from "@/components/DialCoverPanel";
 
 type Profile = {
   name: string | null;
@@ -149,48 +150,94 @@ export default function SettingsPage() {
 
   const displayAvatarUrl = profile?.avatarUrl ?? session?.user?.avatarUrl ?? null;
 
-  return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-10">
-      <div className="grid gap-8 lg:grid-cols-[minmax(280px,1fr)_minmax(0,1.15fr)] lg:items-stretch lg:gap-10">
-        <section
-          className={cn(
-            sectionBox,
-            "flex flex-col lg:min-h-[min(100vh-10rem,720px)]"
-          )}
-        >
-          {profileLoading ?
-            <div className="flex flex-1 flex-col items-center justify-center gap-4 py-12">
-              <Loader2 className="h-10 w-10 animate-spin text-[#0056b3]" />
-              <p className="text-sm text-gray-500">Loading profile…</p>
-            </div>
-          : <>
-              <ProfileAvatarUpload
-                variant="settings"
-                user={{
-                  email,
-                  name: session?.user?.name,
-                  avatarUrl: displayAvatarUrl,
-                }}
-                displayName={name || session?.user?.name}
-                onAvatarSaved={(next) =>
-                  setProfile((p) => (p ? { ...p, ...next } : p))
-                }
-              />
+  function SettingsCoverHeader() {
+    const { url, busy, pct, openFilePicker, onRemove } = useDialCover();
+    return (
+      <div className="overflow-hidden border-y border-gray-200 bg-white shadow-sm sm:rounded-2xl sm:border">
+        <div className="relative h-[min(42vw,220px)] bg-slate-300 sm:h-[280px]">
+          {url ?
+            <>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={url} alt="" className="h-full w-full object-cover" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-black/25" />
+            </>
+          : <div className="absolute inset-0 bg-gradient-to-br from-[#0c1929] via-[#0a4d8c]/80 to-slate-500" />}
 
-              {profile ?
-                <DialCoverProvider
-                  initial={{
-                    url: profile.dialCoverUrl ?? null,
-                    posX: profile.dialCoverPosX ?? 50,
-                    posY: profile.dialCoverPosY ?? 50,
-                    zoom: profile.dialCoverZoom ?? 100,
-                  }}
+          <div className="absolute bottom-3 right-3 flex flex-wrap items-center justify-end gap-2 sm:bottom-4 sm:right-4">
+            <button
+              type="button"
+              onClick={openFilePicker}
+              disabled={busy}
+              className="inline-flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-md ring-1 ring-black/10 transition hover:bg-gray-50 disabled:opacity-60"
+            >
+              {busy ? `Uploading ${pct}%` : "Edit cover photo"}
+            </button>
+            {url ?
+              <>
+                <Link
+                  href="/dashboard?adjustCover=1"
+                  className="rounded-lg bg-black/50 px-3 py-2 text-sm font-medium text-white shadow-md backdrop-blur-md ring-1 ring-white/20 transition hover:bg-black/65"
                 >
-                  <DialCoverSettingsCard />
-                </DialCoverProvider>
-              : null}
+                  Reposition
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => void onRemove()}
+                  disabled={busy}
+                  className="inline-flex items-center gap-2 rounded-lg border border-white/35 bg-white/15 px-3 py-2 text-sm font-medium text-white backdrop-blur-md hover:bg-white/25 disabled:opacity-50"
+                >
+                  <Trash2 className="h-4 w-4" aria-hidden />
+                  Remove
+                </button>
+              </>
+            : null}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
-              <form onSubmit={saveProfile} className="flex flex-1 flex-col space-y-5">
+  return (
+    <div className="min-h-screen bg-[#f0f2f5] pb-12 pt-0">
+      <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:py-10">
+        {profile ?
+          <DialCoverProvider
+            initial={{
+              url: profile.dialCoverUrl ?? null,
+              posX: profile.dialCoverPosX ?? 50,
+              posY: profile.dialCoverPosY ?? 50,
+              zoom: profile.dialCoverZoom ?? 100,
+            }}
+          >
+            <SettingsCoverHeader />
+
+            <div className="mt-6 grid gap-8 lg:grid-cols-[minmax(280px,1fr)_minmax(0,1.15fr)] lg:items-stretch lg:gap-10">
+          <section
+            className={cn(
+              sectionBox,
+              "flex flex-col lg:min-h-[min(100vh-10rem,720px)]"
+            )}
+          >
+            {profileLoading ?
+              <div className="flex flex-1 flex-col items-center justify-center gap-4 py-12">
+                <Loader2 className="h-10 w-10 animate-spin text-[#0056b3]" />
+                <p className="text-sm text-gray-500">Loading profile…</p>
+              </div>
+            : <>
+                <ProfileAvatarUpload
+                  variant="settings"
+                  user={{
+                    email,
+                    name: session?.user?.name,
+                    avatarUrl: displayAvatarUrl,
+                  }}
+                  displayName={name || session?.user?.name}
+                  onAvatarSaved={(next) =>
+                    setProfile((p) => (p ? { ...p, ...next } : p))
+                  }
+                />
+
+                <form onSubmit={saveProfile} className="flex flex-1 flex-col space-y-5">
                 <div>
                   <label className="mb-1 block text-base font-medium text-gray-800">Name</label>
                   <Input value={name} onChange={(e) => setName(e.target.value)} />
@@ -231,75 +278,78 @@ export default function SettingsPage() {
                 </div>
               </form>
             </>
-          }
-        </section>
-
-        <div className="flex flex-col gap-8">
-          <section className={sectionBox}>
-            <h2 className="mb-2 text-lg font-bold text-[#0056b3]">Change email</h2>
-            <p className="mb-6 text-base text-gray-600">
-              We&apos;ll send a link to your new email to confirm.
-            </p>
-            <form onSubmit={sendEmailChange} className="space-y-4">
-              <div>
-                <label className="mb-1 block text-base font-medium text-gray-800">New email</label>
-                <Input
-                  type="email"
-                  value={newEmail}
-                  onChange={(e) => setNewEmail(e.target.value)}
-                  required
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-base font-medium text-gray-800">
-                  Current password
-                </label>
-                <Input
-                  type="password"
-                  value={curPwEmail}
-                  onChange={(e) => setCurPwEmail(e.target.value)}
-                  required
-                />
-              </div>
-              <Button
-                type="submit"
-                disabled={loading}
-                className="bg-[#0056b3] hover:bg-[#004a9c]"
-              >
-                Send verification
-              </Button>
-            </form>
+            }
           </section>
 
-          <section className={sectionBox}>
-            <h2 className="mb-6 text-lg font-bold text-[#0056b3]">Change password</h2>
-            <form onSubmit={changePassword} className="space-y-4">
-              <div>
-                <label className="mb-1 block text-base font-medium text-gray-800">
-                  Current password
-                </label>
-                <Input type="password" value={curPw} onChange={(e) => setCurPw(e.target.value)} required />
-              </div>
-              <div>
-                <label className="mb-1 block text-base font-medium text-gray-800">New password</label>
-                <Input type="password" value={npw} onChange={(e) => setNpw(e.target.value)} required />
-              </div>
-              <div>
-                <label className="mb-1 block text-base font-medium text-gray-800">
-                  Confirm new password
-                </label>
-                <Input type="password" value={npw2} onChange={(e) => setNpw2(e.target.value)} required />
-              </div>
-              <Button
-                type="submit"
-                disabled={loading}
-                className="bg-[#0056b3] hover:bg-[#004a9c]"
-              >
-                Update password
-              </Button>
-            </form>
-          </section>
-        </div>
+          <div className="flex flex-col gap-8">
+            <section className={sectionBox}>
+              <h2 className="mb-2 text-lg font-bold text-[#0056b3]">Change email</h2>
+              <p className="mb-6 text-base text-gray-600">
+                We&apos;ll send a link to your new email to confirm.
+              </p>
+              <form onSubmit={sendEmailChange} className="space-y-4">
+                <div>
+                  <label className="mb-1 block text-base font-medium text-gray-800">New email</label>
+                  <Input
+                    type="email"
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.target.value)}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-base font-medium text-gray-800">
+                    Current password
+                  </label>
+                  <Input
+                    type="password"
+                    value={curPwEmail}
+                    onChange={(e) => setCurPwEmail(e.target.value)}
+                    required
+                  />
+                </div>
+                <Button
+                  type="submit"
+                  disabled={loading}
+                  className="bg-[#0056b3] hover:bg-[#004a9c]"
+                >
+                  Send verification
+                </Button>
+              </form>
+            </section>
+
+            <section className={sectionBox}>
+              <h2 className="mb-6 text-lg font-bold text-[#0056b3]">Change password</h2>
+              <form onSubmit={changePassword} className="space-y-4">
+                <div>
+                  <label className="mb-1 block text-base font-medium text-gray-800">
+                    Current password
+                  </label>
+                  <Input type="password" value={curPw} onChange={(e) => setCurPw(e.target.value)} required />
+                </div>
+                <div>
+                  <label className="mb-1 block text-base font-medium text-gray-800">New password</label>
+                  <Input type="password" value={npw} onChange={(e) => setNpw(e.target.value)} required />
+                </div>
+                <div>
+                  <label className="mb-1 block text-base font-medium text-gray-800">
+                    Confirm new password
+                  </label>
+                  <Input type="password" value={npw2} onChange={(e) => setNpw2(e.target.value)} required />
+                </div>
+                <Button
+                  type="submit"
+                  disabled={loading}
+                  className="bg-[#0056b3] hover:bg-[#004a9c]"
+                >
+                  Update password
+                </Button>
+              </form>
+            </section>
+          </div>
+            </div>
+          </DialCoverProvider>
+        : null}
       </div>
     </div>
   );
