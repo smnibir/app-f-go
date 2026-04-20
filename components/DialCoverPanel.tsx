@@ -1,8 +1,18 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ImagePlus, Loader2, Trash2 } from "lucide-react";
+import { Check, ImagePlus, Loader2, Trash2, X } from "lucide-react";
 import { useToast } from "@/components/ui/Toaster";
 import { postFormDataWithProgress } from "@/lib/upload-xhr";
 import { cn } from "@/lib/utils";
@@ -18,14 +28,20 @@ type Ctx = {
   posX: number;
   posY: number;
   zoom: number;
-  setPosX: (n: number) => void;
-  setPosY: (n: number) => void;
-  setZoom: (n: number) => void;
+  setPosX: Dispatch<SetStateAction<number>>;
+  setPosY: Dispatch<SetStateAction<number>>;
+  setZoom: Dispatch<SetStateAction<number>>;
   url: string | null;
   busy: boolean;
   pct: number;
   openFilePicker: () => void;
   onRemove: () => void;
+  /** True while positioning cover full-screen (dial hidden). */
+  coverEditMode: boolean;
+  enterCoverEdit: () => void;
+  saveCoverEdit: () => Promise<void>;
+  cancelCoverEdit: () => void;
+  savingCover: boolean;
 };
 
 const DialCoverCtx = createContext<Ctx | null>(null);
@@ -53,13 +69,15 @@ export function DialCoverProvider({
   const [url, setUrl] = useState(initial.url);
   const [busy, setBusy] = useState(false);
   const [pct, setPct] = useState(0);
+  const [coverEditMode, setCoverEditMode] = useState(false);
+  const [savingCover, setSavingCover] = useState(false);
+
   const lastSaved = useRef({
     posX: initial.posX,
     posY: initial.posY,
     zoom: initial.zoom,
     url: initial.url,
   });
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (initial.url !== lastSaved.current.url) {
@@ -73,56 +91,75 @@ export function DialCoverProvider({
       setPosY(initial.posY);
       setZoom(initial.zoom);
       setUrl(initial.url);
+      setCoverEditMode(false);
     }
   }, [initial.url, initial.posX, initial.posY, initial.zoom]);
 
-  const savePos = useCallback(
+  const savePosNow = useCallback(
     async (next: { posX: number; posY: number; zoom: number }) => {
-      try {
-        const res = await fetch("/api/user/dial-cover", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({
-            dialCoverPosX: next.posX,
-            dialCoverPosY: next.posY,
-            dialCoverZoom: next.zoom,
-          }),
-        });
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          throw new Error(typeof data.error === "string" ? data.error : "Save failed");
-        }
-        lastSaved.current = { ...next, url };
-        router.refresh();
-      } catch (e) {
-        toast({
-          title: "Could not save dial background",
-          description: e instanceof Error ? e.message : "Try again.",
-          variant: "destructive",
-        });
+      const body = {
+        dialCoverPosX: Math.round(Math.min(100, Math.max(0, next.posX))),
+        dialCoverPosY: Math.round(Math.min(100, Math.max(0, next.posY))),
+        dialCoverZoom: Math.round(Math.min(200, Math.max(50, next.zoom))),
+      };
+      const res = await fetch("/api/user/dial-cover", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        const msg =
+          typeof data.error === "string" ? data.error
+          : res.status === 400 ? "Invalid request"
+          : "Save failed";
+        throw new Error(msg);
       }
+      lastSaved.current = {
+        posX: body.dialCoverPosX,
+        posY: body.dialCoverPosY,
+        zoom: body.dialCoverZoom,
+        url,
+      };
+      setPosX(body.dialCoverPosX);
+      setPosY(body.dialCoverPosY);
+      setZoom(body.dialCoverZoom);
+      router.refresh();
     },
-    [router, toast, url]
+    [router, url]
   );
 
-  useEffect(() => {
+  const enterCoverEdit = useCallback(() => {
     if (!url) return;
-    if (
-      posX === lastSaved.current.posX &&
-      posY === lastSaved.current.posY &&
-      zoom === lastSaved.current.zoom
-    ) {
-      return;
+    setCoverEditMode(true);
+  }, [url]);
+
+  const cancelCoverEdit = useCallback(() => {
+    const s = lastSaved.current;
+    setPosX(s.posX);
+    setPosY(s.posY);
+    setZoom(s.zoom);
+    setCoverEditMode(false);
+  }, []);
+
+  const saveCoverEdit = useCallback(async () => {
+    if (!url) return;
+    setSavingCover(true);
+    try {
+      await savePosNow({ posX, posY, zoom });
+      setCoverEditMode(false);
+      toast({ title: "Background saved" });
+    } catch (e) {
+      toast({
+        title: "Could not save dial background",
+        description: e instanceof Error ? e.message : "Try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingCover(false);
     }
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => {
-      void savePos({ posX, posY, zoom });
-    }, 450);
-    return () => {
-      if (saveTimer.current) clearTimeout(saveTimer.current);
-    };
-  }, [posX, posY, zoom, url, savePos]);
+  }, [posX, posY, zoom, url, savePosNow, toast]);
 
   const onPickFile = useCallback(
     async (file: File) => {
@@ -142,6 +179,9 @@ export function DialCoverProvider({
           });
           return;
         }
+        const px = Math.round(Math.min(100, Math.max(0, posX)));
+        const py = Math.round(Math.min(100, Math.max(0, posY)));
+        const z = Math.round(Math.min(200, Math.max(50, zoom)));
         const patch = await fetch("/api/user/dial-cover", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -149,17 +189,25 @@ export function DialCoverProvider({
           body: JSON.stringify({
             dialCoverUrl: payload.url,
             dialCoverPublicId: payload.publicId,
-            dialCoverPosX: posX,
-            dialCoverPosY: posY,
-            dialCoverZoom: zoom,
+            dialCoverPosX: px,
+            dialCoverPosY: py,
+            dialCoverZoom: z,
           }),
         });
         if (!patch.ok) {
-          toast({ title: "Could not save", description: "Try again.", variant: "destructive" });
+          const err = await patch.json().catch(() => ({}));
+          toast({
+            title: "Could not save",
+            description: typeof err.error === "string" ? err.error : "Try again.",
+            variant: "destructive",
+          });
           return;
         }
         setUrl(payload.url);
-        lastSaved.current = { posX, posY, zoom, url: payload.url };
+        lastSaved.current = { posX: px, posY: py, zoom: z, url: payload.url };
+        setPosX(px);
+        setPosY(py);
+        setZoom(z);
         toast({ title: "Cover updated" });
         router.refresh();
       } finally {
@@ -183,6 +231,7 @@ export function DialCoverProvider({
       setPosY(50);
       setZoom(100);
       lastSaved.current = { posX: 50, posY: 50, zoom: 100, url: null };
+      setCoverEditMode(false);
       toast({ title: "Cover removed" });
       router.refresh();
     } finally {
@@ -215,6 +264,11 @@ export function DialCoverProvider({
     pct,
     openFilePicker,
     onRemove,
+    coverEditMode,
+    enterCoverEdit,
+    saveCoverEdit,
+    cancelCoverEdit,
+    savingCover,
   };
 
   return (
@@ -234,10 +288,132 @@ export function DialCoverProvider({
   );
 }
 
-/** Facebook-style corner control on the dial (icon + “Upload cover”). */
+/** Full-viewport cover; drag/wheel only while `editing` is true. */
+export function DashboardCoverBackground({ editing }: { editing: boolean }) {
+  const { url, posX, posY, zoom, setPosX, setPosY, setZoom } = useDialCover();
+  const drag = useRef<{ lastX: number; lastY: number } | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  if (!url) return null;
+
+  return (
+    <div
+      ref={containerRef}
+      className={cn(
+        "fixed inset-0 z-0 overflow-hidden bg-gray-200 transition-opacity",
+        editing ? "pointer-events-auto" : "pointer-events-none"
+      )}
+      style={{ touchAction: editing ? "none" : "auto" }}
+      onPointerDown={(e) => {
+        if (!editing || e.button !== 0) return;
+        drag.current = { lastX: e.clientX, lastY: e.clientY };
+        try {
+          (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
+        } catch {
+          /* ignore */
+        }
+      }}
+      onPointerMove={(e) => {
+        if (!editing || !drag.current || !containerRef.current) return;
+        const dx = e.clientX - drag.current.lastX;
+        const dy = e.clientY - drag.current.lastY;
+        drag.current.lastX = e.clientX;
+        drag.current.lastY = e.clientY;
+        const w = containerRef.current.clientWidth || 1;
+        const h = containerRef.current.clientHeight || 1;
+        setPosX((x) => Math.min(100, Math.max(0, x - (dx / w) * 140)));
+        setPosY((y) => Math.min(100, Math.max(0, y - (dy / h) * 140)));
+      }}
+      onPointerUp={() => {
+        drag.current = null;
+      }}
+      onPointerCancel={() => {
+        drag.current = null;
+      }}
+      onWheel={(e) => {
+        if (!editing) return;
+        e.preventDefault();
+        const delta = -e.deltaY * 0.12;
+        setZoom((z) => Math.min(200, Math.max(50, Math.round(z + delta))));
+      }}
+    >
+      <div
+        className="h-full w-full will-change-transform"
+        style={{
+          transform: `scale(${zoom / 100})`,
+          transformOrigin: `${posX}% ${posY}%`,
+        }}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={url}
+          alt=""
+          className="h-full w-full object-cover select-none"
+          style={{ objectPosition: `${posX}% ${posY}%` }}
+          draggable={false}
+        />
+      </div>
+    </div>
+  );
+}
+
+/** Fixed bar while editing cover (Save / Cancel). */
+export function CoverEditToolbar() {
+  const { saveCoverEdit, cancelCoverEdit, savingCover, openFilePicker, busy, pct, url } =
+    useDialCover();
+
+  return (
+    <div className="pointer-events-auto fixed inset-x-0 bottom-0 z-[50] border-t border-gray-200/80 bg-white/95 px-4 py-3 shadow-[0_-4px_24px_rgba(0,0,0,0.08)] backdrop-blur-md supports-[padding:max(0px)]:pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+      <div className="mx-auto flex max-w-lg flex-col gap-3 sm:max-w-none sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-center text-sm text-gray-600 sm:text-left">
+          <span className="font-medium text-gray-900">Position your background</span>
+          <span className="hidden sm:inline"> — </span>
+          <span className="block sm:inline">Drag to pan, scroll to zoom.</span>
+        </p>
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          <button
+            type="button"
+            onClick={openFilePicker}
+            disabled={busy || savingCover}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-800 shadow-sm hover:bg-gray-50 disabled:opacity-50"
+          >
+            {busy ?
+              <Loader2 className="h-4 w-4 animate-spin" />
+            : <ImagePlus className="h-4 w-4" />}
+            {busy ? `${pct}%` : url ? "Change photo" : "Add photo"}
+          </button>
+          <button
+            type="button"
+            onClick={cancelCoverEdit}
+            disabled={savingCover}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-800 shadow-sm hover:bg-gray-50 disabled:opacity-50"
+          >
+            <X className="h-4 w-4" />
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => void saveCoverEdit()}
+            disabled={savingCover}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-[#0056b3] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#004a9c] disabled:opacity-60"
+          >
+            {savingCover ?
+              <Loader2 className="h-4 w-4 animate-spin" />
+            : <Check className="h-4 w-4" />}
+            Save
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Upload / change cover when not in edit mode. */
 export function DialCoverCornerFab({ side = "right" }: { side?: "left" | "right" }) {
-  const { busy, pct, openFilePicker, url } = useDialCover();
+  const { busy, pct, openFilePicker, url, coverEditMode } = useDialCover();
   const label = url ? "Change cover" : "Upload cover";
+
+  if (coverEditMode) return null;
 
   return (
     <button
@@ -247,8 +423,9 @@ export function DialCoverCornerFab({ side = "right" }: { side?: "left" | "right"
       title={label}
       aria-label={busy ? `Uploading, ${pct}%` : label}
       className={cn(
-        "absolute z-[5] flex max-w-[calc(100%-1.5rem)] items-center gap-1.5 rounded-lg border border-black/[0.08] bg-white/95 px-2 py-1.5 text-left shadow-md backdrop-blur-sm transition hover:bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0056b3] focus-visible:ring-offset-2 disabled:opacity-60 sm:gap-2 sm:px-2.5 sm:py-2",
-        side === "right" ? "bottom-3 right-3" : "bottom-3 left-3"
+        "fixed z-[45] flex max-w-[min(calc(100vw-1.5rem),280px)] items-center gap-1.5 rounded-lg border border-black/[0.08] bg-white/95 px-2 py-1.5 text-left shadow-md backdrop-blur-sm transition hover:bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0056b3] focus-visible:ring-offset-2 disabled:opacity-60 sm:gap-2 sm:px-2.5 sm:py-2",
+        side === "right" ? "bottom-[max(1rem,env(safe-area-inset-bottom))] right-[max(1rem,env(safe-area-inset-right))]"
+        : "bottom-[max(1rem,env(safe-area-inset-bottom))] left-[max(1rem,env(safe-area-inset-left))]"
       )}
     >
       {busy ?
@@ -257,138 +434,106 @@ export function DialCoverCornerFab({ side = "right" }: { side?: "left" | "right"
       <span className="hidden min-w-0 truncate text-[11px] font-semibold leading-tight text-gray-900 sm:inline sm:text-xs">
         {busy ? `Uploading… ${pct}%` : label}
       </span>
-      {/* Mobile: icon-only still opens picker; label exposed via aria-label / title */}
     </button>
   );
 }
 
-function PositionSliders({ className }: { className?: string }) {
-  const { posX, posY, zoom, setPosX, setPosY, setZoom } = useDialCover();
+/** CTA to enter cover edit mode or hint to upload. */
+export function DialCoverDashboardHint() {
+  const { url, enterCoverEdit } = useDialCover();
 
   return (
-    <div className={cn("space-y-3", className)}>
-      <label className="block text-xs font-medium text-gray-600">
-        Horizontal focus ({posX}%)
-        <input
-          type="range"
-          min={0}
-          max={100}
-          value={posX}
-          onChange={(e) => setPosX(Number(e.target.value))}
-          className="mt-1 w-full accent-[#0056b3]"
-        />
-      </label>
-      <label className="block text-xs font-medium text-gray-600">
-        Vertical focus ({posY}%)
-        <input
-          type="range"
-          min={0}
-          max={100}
-          value={posY}
-          onChange={(e) => setPosY(Number(e.target.value))}
-          className="mt-1 w-full accent-[#0056b3]"
-        />
-      </label>
-      <label className="block text-xs font-medium text-gray-600">
-        Zoom ({zoom}%)
-        <input
-          type="range"
-          min={50}
-          max={200}
-          value={zoom}
-          onChange={(e) => setZoom(Number(e.target.value))}
-          className="mt-1 w-full accent-[#0056b3]"
-        />
-      </label>
-    </div>
-  );
-}
-
-/** Sliders + hint below the dial (upload is on the dial corner). */
-export function DialCoverDashboardSliders() {
-  const { url } = useDialCover();
-
-  return (
-    <div className="mt-5 w-full max-w-[min(100vw-2rem,520px)]">
+    <div className="pointer-events-auto mt-5 w-full max-w-[min(100vw,520px)] px-2">
       {url ?
-        <>
-          <p className="mb-2 text-xs text-gray-500">
-            Position and zoom save automatically. Use <span className="font-medium text-gray-700">Change cover</span> on
-            the dial or <span className="font-medium text-gray-700">Add cover</span> in{" "}
-            <span className="font-medium text-gray-700">Settings</span> to replace the image.
+        <div className="flex flex-col items-center gap-2 sm:flex-row sm:justify-center sm:gap-3">
+          <button
+            type="button"
+            onClick={enterCoverEdit}
+            className="rounded-full bg-white/90 px-4 py-2 text-sm font-semibold text-[#0056b3] shadow-md ring-1 ring-black/[0.08] backdrop-blur-sm transition hover:bg-white"
+          >
+            Adjust background
+          </button>
+          <p className="text-center text-xs text-gray-600">
+            Hide the dial, position the full-screen photo, then save.
           </p>
-          <div className="rounded-2xl border border-gray-200 bg-white/90 p-4 shadow-sm backdrop-blur-sm">
-            <p className="mb-3 text-sm font-semibold text-gray-800">Adjust cover</p>
-            <PositionSliders />
-          </div>
-        </>
+        </div>
       : <p className="text-center text-xs text-gray-500">
-          Use <span className="font-medium text-gray-700">Upload cover</span> on the dial, or{" "}
-          <span className="font-medium text-gray-700">Add cover</span> in{" "}
-          <span className="font-medium text-gray-700">Settings</span>, to add a background.
+          Use <span className="font-medium text-gray-700">Upload cover</span> (corner) or{" "}
+          <span className="font-medium text-gray-700">Add cover</span> in Settings.
         </p>}
     </div>
   );
 }
 
-/** Settings column: Facebook-style “Add cover” + preview + sliders. */
+/** Settings: polished background section. */
 export function DialCoverSettingsCard() {
   const { url, busy, pct, openFilePicker, onRemove } = useDialCover();
 
   return (
-    <div className="mt-8 border-t border-gray-100 pt-8">
-      <h3 className="text-base font-semibold text-gray-900">Dial cover</h3>
-      <p className="mt-1 text-sm text-gray-600">
-        Add a photo behind your dial — you can also use <span className="font-medium text-gray-800">Upload cover</span>{" "}
-        on the dashboard dial. Position and zoom save automatically.
-      </p>
+    <div className="mt-10 overflow-hidden rounded-2xl border border-gray-200/90 bg-gradient-to-br from-slate-50 to-gray-100 shadow-sm">
+      <div className="border-b border-gray-200/80 bg-white/60 px-5 py-4 backdrop-blur-sm">
+        <h3 className="text-lg font-semibold tracking-tight text-gray-900">Background</h3>
+        <p className="mt-1 max-w-xl text-sm leading-relaxed text-gray-600">
+          Full-screen photo behind the dashboard. Open <span className="font-medium text-gray-800">Adjust background</span>{" "}
+          on the home screen to drag, zoom, and save — or manage the image here.
+        </p>
+      </div>
 
-      <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-start">
+      <div className="p-5">
         <div
           className={cn(
-            "relative aspect-square w-full max-w-[140px] shrink-0 overflow-hidden rounded-full border border-gray-200 bg-gray-100 shadow-inner",
-            url ? "" : "flex items-center justify-center"
+            "relative overflow-hidden rounded-xl border border-gray-200/80 bg-gray-200 shadow-inner",
+            "aspect-[21/9] min-h-[120px] w-full sm:aspect-[24/9]"
           )}
         >
           {url ?
             <>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={url} alt="" className="h-full w-full object-cover" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/20" />
+              <div className="absolute bottom-3 left-3 right-3 flex flex-wrap items-end justify-between gap-2 sm:bottom-4 sm:left-4 sm:right-4">
+                <p className="text-xs font-medium text-white/95 drop-shadow-sm sm:text-sm">Your dashboard background</p>
+                <Link
+                  href="/dashboard?adjustCover=1"
+                  className="rounded-lg bg-white/95 px-3 py-1.5 text-xs font-semibold text-gray-900 shadow-md backdrop-blur-sm transition hover:bg-white sm:px-4 sm:text-sm"
+                >
+                  Adjust on dashboard
+                </Link>
+              </div>
             </>
-          : <ImagePlus className="h-10 w-10 text-gray-300" strokeWidth={1.25} />}
+          : <div className="flex h-full min-h-[120px] flex-col items-center justify-center gap-2 px-4 text-center">
+              <div className="rounded-full bg-white/80 p-3 shadow-sm ring-1 ring-gray-200/80">
+                <ImagePlus className="h-8 w-8 text-[#0056b3]" strokeWidth={1.5} />
+              </div>
+              <p className="text-sm font-medium text-gray-700">No background yet</p>
+              <p className="max-w-xs text-xs text-gray-500">
+                Add a photo for a full-screen look behind your dial.
+              </p>
+            </div>}
         </div>
 
-        <div className="flex min-w-0 flex-1 flex-col gap-3">
-          <div className="flex flex-wrap gap-2">
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={openFilePicker}
+            disabled={busy}
+            className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#0056b3] px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#004a9c] disabled:opacity-60 sm:flex-none sm:px-6"
+          >
+            {busy ?
+              <Loader2 className="h-4 w-4 animate-spin" />
+            : <ImagePlus className="h-4 w-4" strokeWidth={2} />}
+            {busy ? `Uploading… ${pct}%` : url ? "Replace image" : "Add background"}
+          </button>
+          {url ?
             <button
               type="button"
-              onClick={openFilePicker}
+              onClick={() => void onRemove()}
               disabled={busy}
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#0056b3] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#004a9c] disabled:opacity-60"
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-200 bg-white px-4 py-3 text-sm font-medium text-red-800 shadow-sm hover:bg-red-50 disabled:opacity-50"
             >
-              {busy ?
-                <Loader2 className="h-4 w-4 animate-spin" />
-              : <ImagePlus className="h-4 w-4" strokeWidth={2} />}
-              {busy ? `Uploading… ${pct}%` : url ? "Change cover" : "Add cover"}
+              <Trash2 className="h-4 w-4" />
+              Remove
             </button>
-            {url ?
-              <button
-                type="button"
-                onClick={() => void onRemove()}
-                disabled={busy}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-800 shadow-sm hover:bg-gray-50 disabled:opacity-50"
-              >
-                <Trash2 className="h-4 w-4" />
-                Remove
-              </button>
-            : null}
-          </div>
-
-          {url ?
-            <div className="rounded-xl border border-gray-200 bg-gray-50/80 p-4">
-              <p className="mb-3 text-xs font-medium text-gray-700">Position &amp; zoom</p>
-              <PositionSliders />
-            </div>
           : null}
         </div>
       </div>

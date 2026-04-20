@@ -2,7 +2,11 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Dial } from "@/components/Dial";
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: { adjustCover?: string };
+}) {
   const session = await auth();
   if (!session?.user?.id) return null;
 
@@ -18,6 +22,7 @@ export default async function DashboardPage() {
 
   return (
     <Dial
+      adjustCoverFromSettings={searchParams.adjustCover === "1"}
       user={{
         email: session.user.email || "",
         name: session.user.name,

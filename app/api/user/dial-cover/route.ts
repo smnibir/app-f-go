@@ -22,12 +22,28 @@ const urlString = z.preprocess(
     )
 );
 
+const int0_100 = z.preprocess(
+  (v) => {
+    const n = typeof v === "number" ? v : Number(v);
+    return Number.isFinite(n) ? Math.round(n) : v;
+  },
+  z.number().int().min(0).max(100)
+);
+
+const int50_200 = z.preprocess(
+  (v) => {
+    const n = typeof v === "number" ? v : Number(v);
+    return Number.isFinite(n) ? Math.round(n) : v;
+  },
+  z.number().int().min(50).max(200)
+);
+
 const patchSchema = z.object({
   dialCoverUrl: urlString.optional(),
   dialCoverPublicId: z.preprocess((v) => (typeof v === "string" ? v.trim() : v), z.string().min(1)).optional(),
-  dialCoverPosX: z.number().int().min(0).max(100).optional(),
-  dialCoverPosY: z.number().int().min(0).max(100).optional(),
-  dialCoverZoom: z.number().int().min(50).max(200).optional(),
+  dialCoverPosX: int0_100.optional(),
+  dialCoverPosY: int0_100.optional(),
+  dialCoverZoom: int50_200.optional(),
 });
 
 export async function PATCH(req: Request) {

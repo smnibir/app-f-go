@@ -1,17 +1,22 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { useState } from "react";
 import { Waypoints, Upload, Trees, Home, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ProfileAvatarUpload } from "@/components/profile/ProfileAvatarUpload";
 import {
+  CoverEditToolbar,
+  DashboardCoverBackground,
   DialCoverCornerFab,
-  DialCoverDashboardSliders,
+  DialCoverDashboardHint,
   DialCoverProvider,
+  useDialCover,
 } from "@/components/DialCoverPanel";
 
 type Props = {
+  /** Open full-screen cover adjust flow (e.g. link from Settings). */
+  adjustCoverFromSettings?: boolean;
   user: {
     email: string;
     name?: string | null;
@@ -82,15 +87,155 @@ function activeSegmentIndex(pathname: string): number | null {
   return null;
 }
 
-/** Icon ring radius — matches former foreignObject anchor (avoids WebKit foreignObject misalignment). */
 const ICON_R = R_INNER + (R_OUTER - R_INNER) * 0.52;
 
-export function Dial({ user, dialCover }: Props) {
+/** Opens adjust mode when arriving from Settings with ?adjustCover=1. */
+function AdjustCoverFromSettingsLink({ trigger }: { trigger: boolean }) {
+  const router = useRouter();
+  const { url, enterCoverEdit } = useDialCover();
+  const done = useRef(false);
+
+  useEffect(() => {
+    if (!trigger || !url || done.current) return;
+    done.current = true;
+    enterCoverEdit();
+    router.replace("/dashboard", { scroll: false });
+  }, [trigger, url, enterCoverEdit, router]);
+
+  return null;
+}
+
+function DialInner({
+  user,
+  adjustCoverFromSettings,
+}: {
+  user: Props["user"];
+  adjustCoverFromSettings: boolean;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const [hovered, setHovered] = useState<number | null>(null);
   const routeActive = activeSegmentIndex(pathname ?? "");
+  const { coverEditMode, url } = useDialCover();
+  const editingCover = Boolean(coverEditMode && url);
 
+  return (
+    <>
+      <AdjustCoverFromSettingsLink trigger={adjustCoverFromSettings} />
+      <DashboardCoverBackground editing={editingCover} />
+
+      {editingCover ?
+        <CoverEditToolbar />
+      : <>
+          <div className="pointer-events-none relative z-10 flex min-h-[calc(100dvh-3.5rem)] w-full flex-col items-center justify-center px-0 py-4 md:min-h-[calc(100dvh-5rem)] md:py-6">
+            <div
+              className="pointer-events-auto relative aspect-square w-full max-w-[min(100vw,520px)] overflow-hidden rounded-full bg-white shadow-lg ring-1 ring-black/[0.06]"
+              style={{ touchAction: "manipulation" }}
+            >
+              <svg
+                viewBox={`0 0 ${VB} ${VB}`}
+                className="relative z-[1] h-full w-full select-none"
+                style={{ WebkitTapHighlightColor: "transparent" }}
+              >
+                {segments.map((seg, i) => {
+                  const mid = MID_ANGLES[i];
+                  const start = mid - SEG_WIDTH / 2;
+                  const path = ringSlicePath(start, SEG_WIDTH);
+                  const isRoute = !seg.locked && routeActive === i;
+                  const isHover = !seg.locked && hovered === i;
+                  const filled = seg.locked ? false : isRoute || isHover;
+
+                  return (
+                    <path
+                      key={seg.label}
+                      d={path}
+                      className="pointer-events-none transition-[fill] duration-200 ease-out"
+                      fill={seg.locked ? "#ffffff" : filled ? DIAL_BLUE : "#ffffff"}
+                      fillOpacity={seg.locked ? 0.65 : 1}
+                      stroke="none"
+                    >
+                      <title>{seg.locked ? seg.tip : seg.label}</title>
+                    </path>
+                  );
+                })}
+                <circle cx={CX} cy={CY} r={R_INNER} fill="#ffffff" />
+              </svg>
+
+              {segments.map((seg, i) => {
+                const mid = MID_ANGLES[i];
+                const lx = CX + ICON_R * Math.cos(rad(mid));
+                const ly = CY + ICON_R * Math.sin(rad(mid));
+                const leftPct = (lx / VB) * 100;
+                const topPct = (ly / VB) * 100;
+                const Icon = seg.icon;
+                const isRoute = !seg.locked && routeActive === i;
+                const isHover = !seg.locked && hovered === i;
+                const filled = seg.locked ? false : isRoute || isHover;
+
+                return (
+                  <button
+                    key={`btn-${seg.label}`}
+                    type="button"
+                    className={cn(
+                      "absolute z-[2] flex max-h-[28%] min-h-[72px] w-[26%] max-w-[132px] -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center gap-0.5 rounded-lg px-1 text-center sm:max-h-[30%] sm:min-h-[80px]",
+                      seg.locked ? "cursor-not-allowed" : "cursor-pointer active:opacity-95"
+                    )}
+                    style={{ left: `${leftPct}%`, top: `${topPct}%` }}
+                    disabled={seg.locked}
+                    aria-label={seg.locked ? (seg.tip ?? seg.label) : seg.label}
+                    onMouseEnter={() => !seg.locked && setHovered(i)}
+                    onMouseLeave={() => setHovered(null)}
+                    onClick={() => {
+                      if (!seg.locked && "href" in seg) router.push(seg.href);
+                    }}
+                  >
+                    <span className="relative inline-flex shrink-0">
+                      <Icon
+                        className={cn(
+                          "h-7 w-7 sm:h-8 sm:w-8",
+                          filled ? "text-white"
+                          : seg.locked ? "text-gray-400"
+                          : "text-[#0056b3]"
+                        )}
+                        strokeWidth={1.75}
+                      />
+                      {seg.locked && seg.lockBadge ?
+                        <span className="absolute -right-0.5 -top-0.5 rounded-full bg-gray-100 p-0.5">
+                          <Lock className="h-2.5 w-2.5 text-gray-500 sm:h-3 sm:w-3" aria-hidden />
+                        </span>
+                      : null}
+                    </span>
+                    <span
+                      className={cn(
+                        "mt-0.5 max-w-full px-0.5 text-[13px] font-semibold leading-[1.15] tracking-tight sm:text-[15px]",
+                        seg.locked ? "text-gray-500"
+                        : filled ? "text-white"
+                        : "text-navy"
+                      )}
+                    >
+                      {seg.label}
+                    </span>
+                  </button>
+                );
+              })}
+
+              <div className="pointer-events-none absolute inset-0 z-[3] flex items-center justify-center">
+                <div className="pointer-events-auto flex flex-col items-center gap-2">
+                  <ProfileAvatarUpload variant="dial" user={user} />
+                </div>
+              </div>
+            </div>
+
+            <DialCoverDashboardHint />
+          </div>
+
+          <DialCoverCornerFab side="right" />
+        </>}
+    </>
+  );
+}
+
+export function Dial({ user, dialCover, adjustCoverFromSettings = false }: Props) {
   return (
     <DialCoverProvider
       initial={{
@@ -100,130 +245,7 @@ export function Dial({ user, dialCover }: Props) {
         zoom: dialCover.zoom,
       }}
     >
-      <div className="flex flex-col items-center justify-center px-4 py-8 md:py-12">
-        <div
-          className="relative aspect-square w-full max-w-[min(100vw-2rem,520px)] overflow-hidden rounded-full bg-white shadow-lg ring-1 ring-black/[0.06]"
-          style={{ touchAction: "manipulation" }}
-        >
-        {dialCover.url ?
-          <div className="pointer-events-none absolute inset-0">
-            <div
-              className="h-full w-full will-change-transform"
-              style={{
-                transform: `scale(${dialCover.zoom / 100})`,
-                transformOrigin: `${dialCover.posX}% ${dialCover.posY}%`,
-              }}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={dialCover.url}
-                alt=""
-                className="h-full w-full object-cover"
-                style={{ objectPosition: `${dialCover.posX}% ${dialCover.posY}%` }}
-                draggable={false}
-              />
-            </div>
-          </div>
-        : null}
-
-        <svg
-          viewBox={`0 0 ${VB} ${VB}`}
-          className="relative z-[1] h-full w-full select-none"
-          style={{ WebkitTapHighlightColor: "transparent" }}
-        >
-          {segments.map((seg, i) => {
-            const mid = MID_ANGLES[i];
-            const start = mid - SEG_WIDTH / 2;
-            const path = ringSlicePath(start, SEG_WIDTH);
-            const isRoute = !seg.locked && routeActive === i;
-            const isHover = !seg.locked && hovered === i;
-            const filled = seg.locked ? false : isRoute || isHover;
-
-            return (
-              <path
-                key={seg.label}
-                d={path}
-                className="pointer-events-none transition-[fill] duration-200 ease-out"
-                fill={seg.locked ? "#ffffff" : filled ? DIAL_BLUE : "#ffffff"}
-                fillOpacity={seg.locked ? 0.65 : 1}
-                stroke="none"
-              >
-                <title>{seg.locked ? seg.tip : seg.label}</title>
-              </path>
-            );
-          })}
-          <circle cx={CX} cy={CY} r={R_INNER} fill="#ffffff" />
-        </svg>
-
-        {segments.map((seg, i) => {
-          const mid = MID_ANGLES[i];
-          const lx = CX + ICON_R * Math.cos(rad(mid));
-          const ly = CY + ICON_R * Math.sin(rad(mid));
-          const leftPct = (lx / VB) * 100;
-          const topPct = (ly / VB) * 100;
-          const Icon = seg.icon;
-          const isRoute = !seg.locked && routeActive === i;
-          const isHover = !seg.locked && hovered === i;
-          const filled = seg.locked ? false : isRoute || isHover;
-
-          return (
-            <button
-              key={`btn-${seg.label}`}
-              type="button"
-              className={cn(
-                "absolute z-[2] flex max-h-[28%] min-h-[72px] w-[26%] max-w-[132px] -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center gap-0.5 rounded-lg px-1 text-center sm:max-h-[30%] sm:min-h-[80px]",
-                seg.locked ? "cursor-not-allowed" : "cursor-pointer active:opacity-95"
-              )}
-              style={{ left: `${leftPct}%`, top: `${topPct}%` }}
-              disabled={seg.locked}
-              aria-label={seg.locked ? (seg.tip ?? seg.label) : seg.label}
-              onMouseEnter={() => !seg.locked && setHovered(i)}
-              onMouseLeave={() => setHovered(null)}
-              onClick={() => {
-                if (!seg.locked && "href" in seg) router.push(seg.href);
-              }}
-            >
-              <span className="relative inline-flex shrink-0">
-                <Icon
-                  className={cn(
-                    "h-7 w-7 sm:h-8 sm:w-8",
-                    filled ? "text-white"
-                    : seg.locked ? "text-gray-400"
-                    : "text-[#0056b3]"
-                  )}
-                  strokeWidth={1.75}
-                />
-                {seg.locked && seg.lockBadge ?
-                  <span className="absolute -right-0.5 -top-0.5 rounded-full bg-gray-100 p-0.5">
-                    <Lock className="h-2.5 w-2.5 text-gray-500 sm:h-3 sm:w-3" aria-hidden />
-                  </span>
-                : null}
-              </span>
-              <span
-                className={cn(
-                  "mt-0.5 max-w-full px-0.5 text-[13px] font-semibold leading-[1.15] tracking-tight sm:text-[15px]",
-                  seg.locked ? "text-gray-500"
-                  : filled ? "text-white"
-                  : "text-navy"
-                )}
-              >
-                {seg.label}
-              </span>
-            </button>
-          );
-        })}
-
-        <div className="pointer-events-none absolute inset-0 z-[3] flex items-center justify-center">
-          <div className="pointer-events-auto flex flex-col items-center gap-2">
-            <ProfileAvatarUpload variant="dial" user={user} />
-          </div>
-        </div>
-
-        <DialCoverCornerFab side="right" />
-      </div>
-
-        <DialCoverDashboardSliders />
-      </div>
+      <DialInner user={user} adjustCoverFromSettings={adjustCoverFromSettings} />
     </DialCoverProvider>
   );
 }
