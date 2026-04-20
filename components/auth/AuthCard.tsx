@@ -56,6 +56,8 @@ export function AuthCard({
   const [showPwReg, setShowPwReg] = useState(false);
   const [showPwReset, setShowPwReset] = useState(false);
   const [submitting, setSubmitting] = useState<AuthSubmitting>(null);
+  const [needsVerification, setNeedsVerification] = useState(false);
+  const [resendBusy, setResendBusy] = useState(false);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -73,14 +75,25 @@ export function AuthCard({
   async function onSignIn(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting("signin");
+    setNeedsVerification(false);
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
-      const data = await res.json();
+      const data = await res.json() as { error?: string; code?: string; handoffToken?: string };
       if (!res.ok) {
+        if (res.status === 403 && data.code === "EMAIL_NOT_VERIFIED") {
+          setNeedsVerification(true);
+          toast({
+            title: "Email not verified",
+            description: "Confirm your email or resend the link below.",
+            variant: "destructive",
+          });
+          setSubmitting(null);
+          return;
+        }
         const msg = typeof data.error === "string" ? data.error : "Could not sign in.";
         toast({
           title: "Couldn’t sign in",
@@ -90,7 +103,16 @@ export function AuthCard({
         setSubmitting(null);
         return;
       }
-      const handoff = data.handoffToken as string;
+      const handoff = data.handoffToken;
+      if (!handoff) {
+        toast({
+          title: "Couldn’t sign in",
+          description: "Missing session token. Try again.",
+          variant: "destructive",
+        });
+        setSubmitting(null);
+        return;
+      }
       const sign = await signIn("login-handoff", { token: handoff, redirect: false });
       if (sign?.error) {
         toast({
@@ -109,6 +131,46 @@ export function AuthCard({
         variant: "destructive",
       });
       setSubmitting(null);
+    }
+  }
+
+  async function onResendVerification() {
+    if (!email.trim()) {
+      toast({
+        title: "Enter your email",
+        description: "Use the same email you registered with.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setResendBusy(true);
+    try {
+      const res = await fetch("/api/auth/resend-verification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim() }),
+      });
+      const data = await res.json() as { message?: string; error?: string };
+      if (!res.ok) {
+        toast({
+          title: "Could not send",
+          description: typeof data.error === "string" ? data.error : "Try again.",
+          variant: "destructive",
+        });
+        return;
+      }
+      toast({
+        title: "Check your inbox",
+        description: data.message || "If this account exists and is unverified, we sent a link.",
+      });
+    } catch {
+      toast({
+        title: "Something went wrong",
+        description: "Try again in a moment.",
+        variant: "destructive",
+      });
+    } finally {
+      setResendBusy(false);
     }
   }
 
@@ -317,6 +379,22 @@ export function AuthCard({
           </>
         : "Sign in"}
       </button>
+      {needsVerification ?
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          <p className="font-medium">Your email is not verified yet.</p>
+          <p className="mt-1 text-amber-900/90">
+            We can send another verification link to <span className="font-semibold">{email}</span>.
+          </p>
+          <button
+            type="button"
+            className="mt-3 w-full rounded-full border border-amber-300 bg-white py-2.5 text-sm font-semibold text-amber-950 transition hover:bg-amber-100 disabled:opacity-50"
+            onClick={() => void onResendVerification()}
+            disabled={resendBusy}
+          >
+            {resendBusy ? "Sending…" : "Resend verification email"}
+          </button>
+        </div>
+      : null}
     </form>
   );
 

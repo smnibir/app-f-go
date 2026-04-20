@@ -1,0 +1,6 @@
+-- AlterTable
+ALTER TABLE "User" ADD COLUMN     "dialCoverUrl" TEXT,
+ADD COLUMN     "dialCoverPublicId" TEXT,
+ADD COLUMN     "dialCoverPosX" INTEGER NOT NULL DEFAULT 50,
+ADD COLUMN     "dialCoverPosY" INTEGER NOT NULL DEFAULT 50,
+ADD COLUMN     "dialCoverZoom" INTEGER NOT NULL DEFAULT 100;

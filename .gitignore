@@ -28,6 +28,7 @@ yarn-error.log*
 # local env files
 .env*.local
 .env
+.env.production
 
 # vercel
 .vercel
@@ -36,5 +37,4 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# prisma
-/prisma/migrations/**/migration_lock.toml
+# prisma — keep migration_lock.toml tracked (required for `prisma migrate deploy` on Vercel)

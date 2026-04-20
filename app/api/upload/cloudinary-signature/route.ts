@@ -48,6 +48,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Profile photo must be an image" }, { status: 400 });
   }
 
+  if (purpose === "dial-cover" && classified.type !== "IMAGE") {
+    return NextResponse.json({ error: "Dial background must be an image" }, { status: 400 });
+  }
+
   if (!(await configureCloudinaryWithSettings())) {
     return NextResponse.json({ error: "Upload not configured" }, { status: 500 });
   }
@@ -62,6 +66,7 @@ export async function POST(req: Request) {
 
   const folder =
     purpose === "avatar" ? "futurego/avatars"
+    : purpose === "dial-cover" ? "futurego/dial-covers"
     : purpose === "branding" || purpose === "favicon" ? "futurego/branding"
     : "futurego/timeline";
 

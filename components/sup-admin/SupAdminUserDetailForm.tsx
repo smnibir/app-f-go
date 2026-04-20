@@ -4,7 +4,8 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import Link from "next/link";
 import { format } from "date-fns";
-import { ArrowLeft, Calendar, Clock, Layers, ShieldCheck, ShieldOff } from "lucide-react";
+import { signIn } from "next-auth/react";
+import { ArrowLeft, Calendar, Clock, Layers, Link2, Monitor, ShieldCheck, ShieldOff } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toaster";
@@ -44,6 +45,7 @@ export function SupAdminUserDetailForm({
   const isSelf = initialUser.id === actorId;
   const canSetSuperAdmin = actorRole === "SUPER_ADMIN";
   const verified = Boolean(initialUser.emailVerified);
+  const [impersonateBusy, setImpersonateBusy] = useState(false);
   const joinedAt = format(new Date(initialUser.createdAt), "MMMM d, yyyy · h:mm a");
   const updatedAt = format(new Date(initialUser.updatedAt), "MMMM d, yyyy · h:mm a");
 
@@ -73,6 +75,67 @@ export function SupAdminUserDetailForm({
       router.refresh();
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function requestImpersonate(): Promise<{ token: string; url: string } | null> {
+    const res = await fetch("/api/sup-admin/impersonate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId: initialUser.id }),
+    });
+    const data = (await res.json()) as { error?: string; token?: string; url?: string };
+    if (!res.ok || !data.token || !data.url) {
+      toast({
+        title: "Could not open session",
+        description: typeof data.error === "string" ? data.error : "Try again.",
+        variant: "destructive",
+      });
+      return null;
+    }
+    return { token: data.token, url: data.url };
+  }
+
+  async function openUserDashboard() {
+    setImpersonateBusy(true);
+    try {
+      const pair = await requestImpersonate();
+      if (!pair) return;
+      const sign = await signIn("impersonate", { token: pair.token, redirect: false });
+      if (sign?.error) {
+        toast({
+          title: "Session error",
+          description: "Could not switch to this user. Try the temporary link instead.",
+          variant: "destructive",
+        });
+        return;
+      }
+      window.location.href = "/dashboard";
+    } finally {
+      setImpersonateBusy(false);
+    }
+  }
+
+  async function copyDashboardLink() {
+    setImpersonateBusy(true);
+    try {
+      const pair = await requestImpersonate();
+      if (!pair) return;
+      try {
+        await navigator.clipboard.writeText(pair.url);
+        toast({
+          title: "Temporary link copied",
+          description: "Valid for a short time. Paste in a browser to open their dashboard.",
+        });
+      } catch {
+        toast({
+          title: "Copy this URL",
+          description: pair.url,
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setImpersonateBusy(false);
     }
   }
 
@@ -107,6 +170,31 @@ export function SupAdminUserDetailForm({
           <p className="mt-1 text-[15px] text-gray-600">{initialUser.email}</p>
         </div>
       </div>
+
+      {!isSelf ?
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+          <Button
+            type="button"
+            variant="secondary"
+            className="!w-auto"
+            disabled={impersonateBusy}
+            onClick={() => void openUserDashboard()}
+          >
+            <Monitor className="mr-2 h-4 w-4 shrink-0" aria-hidden />
+            Open user dashboard
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            className="!w-auto"
+            disabled={impersonateBusy}
+            onClick={() => void copyDashboardLink()}
+          >
+            <Link2 className="mr-2 h-4 w-4 shrink-0" aria-hidden />
+            Copy temporary link
+          </Button>
+        </div>
+      : null}
 
       <div className="grid gap-8 lg:grid-cols-2 lg:items-start">
         <div>

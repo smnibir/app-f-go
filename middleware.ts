@@ -28,6 +28,11 @@ export async function middleware(request: NextRequest) {
 
   const path = request.nextUrl.pathname;
 
+  /** One-time impersonation handoff (HMAC token); page completes sign-in client-side. */
+  if (path.startsWith("/auth/impersonate")) {
+    return NextResponse.next();
+  }
+
   if (path.startsWith("/sup-admin")) {
     if (!isLoggedIn) {
       return NextResponse.redirect(new URL("/", request.url));

@@ -53,8 +53,8 @@ export async function GET() {
             "  DATABASE_URL = Supabase *pooled* URI (port 6543), add ?sslmode=require&pgbouncer=true if needed",
             "  AUTH_SECRET = openssl rand -base64 32",
             "  NEXTAUTH_URL = https://<your-deployment>.vercel.app (exact URL, https, no trailing path)",
-            "Run locally against prod DB once: npx prisma migrate deploy",
-            "Then seed admin if needed: npm run db:seed (with DATABASE_URL set)",
+            "Migrations run automatically on Vercel build (prisma migrate deploy). If a migration failed, check build logs.",
+            "Ensure DATABASE_URL is available to the Build step in Vercel (same as Production).",
           ],
     },
     { status: ok ? 200 : 503 }

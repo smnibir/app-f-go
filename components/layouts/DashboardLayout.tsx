@@ -18,7 +18,9 @@ export async function DashboardLayout({ children }: { children: React.ReactNode 
           <Link href="/dashboard" className="flex min-h-[48px] shrink-0 items-center">
             <AppLogo />
           </Link>
-          <DashboardSearch />
+          <div className="hidden" aria-hidden>
+            <DashboardSearch />
+          </div>
           <DashboardHeaderMenu user={session.user} />
         </div>
       </header>
