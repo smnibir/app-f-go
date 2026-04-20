@@ -3,8 +3,10 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  // Migrations use this URL. Set to the same value as DATABASE_URL unless DATABASE_URL is a pooler (e.g. Supabase :6543) — then use the direct Postgres URL (port 5432).
+  directUrl = env("DIRECT_URL")
 }
 
 model User {

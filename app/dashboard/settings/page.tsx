@@ -10,6 +10,7 @@ import { useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ProfileAvatarUpload } from "@/components/profile/ProfileAvatarUpload";
+import { DialCoverProvider, DialCoverSettingsCard } from "@/components/DialCoverPanel";
 
 type Profile = {
   name: string | null;
@@ -18,6 +19,10 @@ type Profile = {
   phone: string | null;
   avatarUrl: string | null;
   avatarPublicId: string | null;
+  dialCoverUrl: string | null;
+  dialCoverPosX: number;
+  dialCoverPosY: number;
+  dialCoverZoom: number;
 };
 
 const sectionBox = "rounded-2xl border border-gray-200 bg-white p-6 shadow-sm md:p-8";
@@ -171,6 +176,19 @@ export default function SettingsPage() {
                   setProfile((p) => (p ? { ...p, ...next } : p))
                 }
               />
+
+              {profile ?
+                <DialCoverProvider
+                  initial={{
+                    url: profile.dialCoverUrl ?? null,
+                    posX: profile.dialCoverPosX ?? 50,
+                    posY: profile.dialCoverPosY ?? 50,
+                    zoom: profile.dialCoverZoom ?? 100,
+                  }}
+                >
+                  <DialCoverSettingsCard />
+                </DialCoverProvider>
+              : null}
 
               <form onSubmit={saveProfile} className="flex flex-1 flex-col space-y-5">
                 <div>

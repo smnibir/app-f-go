@@ -33,6 +33,10 @@ export async function GET() {
       phone: true,
       avatarUrl: true,
       avatarPublicId: true,
+      dialCoverUrl: true,
+      dialCoverPosX: true,
+      dialCoverPosY: true,
+      dialCoverZoom: true,
     },
   });
   if (!user) {

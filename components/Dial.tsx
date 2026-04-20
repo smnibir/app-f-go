@@ -5,7 +5,11 @@ import { useState } from "react";
 import { Waypoints, Upload, Trees, Home, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ProfileAvatarUpload } from "@/components/profile/ProfileAvatarUpload";
-import { DialCoverPanel } from "@/components/DialCoverPanel";
+import {
+  DialCoverCornerFab,
+  DialCoverDashboardSliders,
+  DialCoverProvider,
+} from "@/components/DialCoverPanel";
 
 type Props = {
   user: {
@@ -88,11 +92,19 @@ export function Dial({ user, dialCover }: Props) {
   const routeActive = activeSegmentIndex(pathname ?? "");
 
   return (
-    <div className="flex flex-col items-center justify-center px-4 py-8 md:py-12">
-      <div
-        className="relative aspect-square w-full max-w-[min(100vw-2rem,520px)] overflow-hidden rounded-full bg-white shadow-lg ring-1 ring-black/[0.06]"
-        style={{ touchAction: "manipulation" }}
-      >
+    <DialCoverProvider
+      initial={{
+        url: dialCover.url,
+        posX: dialCover.posX,
+        posY: dialCover.posY,
+        zoom: dialCover.zoom,
+      }}
+    >
+      <div className="flex flex-col items-center justify-center px-4 py-8 md:py-12">
+        <div
+          className="relative aspect-square w-full max-w-[min(100vw-2rem,520px)] overflow-hidden rounded-full bg-white shadow-lg ring-1 ring-black/[0.06]"
+          style={{ touchAction: "manipulation" }}
+        >
         {dialCover.url ?
           <div className="pointer-events-none absolute inset-0">
             <div
@@ -206,16 +218,12 @@ export function Dial({ user, dialCover }: Props) {
             <ProfileAvatarUpload variant="dial" user={user} />
           </div>
         </div>
+
+        <DialCoverCornerFab side="right" />
       </div>
 
-      <DialCoverPanel
-        initial={{
-          url: dialCover.url,
-          posX: dialCover.posX,
-          posY: dialCover.posY,
-          zoom: dialCover.zoom,
-        }}
-      />
-    </div>
+        <DialCoverDashboardSliders />
+      </div>
+    </DialCoverProvider>
   );
 }
