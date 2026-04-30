@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { supAdminUserDetailSelect } from "@/lib/sup-admin-users";
 import { adminUserPatchSchema } from "@/lib/validations";
 import type { Role, UserStatus } from "@prisma/client";
+import { deleteCloudinaryAsset } from "@/lib/cloudinary";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await requireAdmin();
@@ -115,4 +116,71 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       emailVerified: updated.emailVerified?.toISOString() ?? null,
     },
   });
+}
+
+export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const gate = await requireAdmin();
+  if (gate.error) {
+    return NextResponse.json(
+      { error: gate.error },
+      { status: gate.error === "Unauthorized" ? 401 : 403 }
+    );
+  }
+  if (!process.env.DATABASE_URL?.trim()) {
+    return NextResponse.json({ error: "Database not configured" }, { status: 503 });
+  }
+
+  const { id } = await params;
+  if (!id?.trim()) {
+    return NextResponse.json({ error: "Invalid id" }, { status: 400 });
+  }
+
+  const actorId = gate.session.user.id!;
+  const actorRole = gate.session.user.role;
+
+  if (id === actorId) {
+    return NextResponse.json({ error: "You cannot delete your own account." }, { status: 400 });
+  }
+
+  const existing = await prisma.user.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      role: true,
+      avatarPublicId: true,
+      dialCoverPublicId: true,
+    },
+  });
+  if (!existing) {
+    return NextResponse.json({ error: "User not found" }, { status: 404 });
+  }
+
+  if (actorRole === "ADMIN" && existing.role === "SUPER_ADMIN") {
+    return NextResponse.json({ error: "Admins cannot delete super admin accounts." }, { status: 403 });
+  }
+
+  if (existing.role === "SUPER_ADMIN") {
+    const superCount = await prisma.user.count({ where: { role: "SUPER_ADMIN" } });
+    if (superCount <= 1) {
+      return NextResponse.json(
+        { error: "Cannot delete the last super admin account." },
+        { status: 400 }
+      );
+    }
+  }
+
+  try {
+    if (existing.avatarPublicId) {
+      await deleteCloudinaryAsset(existing.avatarPublicId, "image");
+    }
+    if (existing.dialCoverPublicId) {
+      await deleteCloudinaryAsset(existing.dialCoverPublicId, "image");
+    }
+  } catch {
+    /* best-effort cleanup */
+  }
+
+  await prisma.user.delete({ where: { id } });
+
+  return NextResponse.json({ ok: true });
 }

@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { sendEmail } from "@/lib/email";
 import { getAppSettings } from "@/lib/settings";
 import { rateLimitAuth, getClientIp } from "@/lib/rate-limit";
+import { sendVerificationEmail } from "@/lib/verification-email";
 
 export async function POST(req: Request) {
   const ip = getClientIp(req);
@@ -29,7 +30,7 @@ export async function POST(req: Request) {
 
   const email = parsed.data.email.toLowerCase();
   const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing) {
+  if (existing?.emailVerified) {
     return NextResponse.json(
       { error: "An account with this email already exists." },
       { status: 409 }
@@ -38,42 +39,54 @@ export async function POST(req: Request) {
 
   const password = await bcrypt.hash(parsed.data.password, 12);
   const verifyToken = crypto.randomBytes(32).toString("hex");
-  const base = process.env.NEXTAUTH_URL || "http://localhost:3000";
   const settings = await getAppSettings();
 
-  await prisma.user.create({
-    data: {
+  if (existing && !existing.emailVerified) {
+    await prisma.user.update({
+      where: { id: existing.id },
+      data: {
+        name: parsed.data.name,
+        password,
+        verifyToken,
+      },
+    });
+    await sendVerificationEmail({
       email,
       name: parsed.data.name,
-      password,
-      role: "USER",
       verifyToken,
-    },
-  });
+    });
+  } else {
+    await prisma.user.create({
+      data: {
+        email,
+        name: parsed.data.name,
+        password,
+        role: "USER",
+        verifyToken,
+      },
+    });
 
-  const verifyLink = `${base}/api/auth/verify-email?token=${encodeURIComponent(verifyToken)}`;
-
-  await sendEmail({
-    to: email,
-    templateKey: "verify_email",
-    variables: {
-      name: parsed.data.name,
-      link: verifyLink,
-      app_name: settings.app_name,
-      logo_url: settings.logo_url || "",
-    },
-  });
-
-  await sendEmail({
-    to: process.env.SUPER_ADMIN_EMAIL || "nibir@webgrowth.io",
-    templateKey: "new_registration",
-    variables: {
-      name: parsed.data.name,
+    await sendVerificationEmail({
       email,
-      app_name: settings.app_name,
-      logo_url: settings.logo_url || "",
-    },
-  });
+      name: parsed.data.name,
+      verifyToken,
+    });
 
-  return NextResponse.json({ ok: true });
+    await sendEmail({
+      to: process.env.SUPER_ADMIN_EMAIL || "nibir@webgrowth.io",
+      templateKey: "new_registration",
+      variables: {
+        name: parsed.data.name,
+        email,
+        app_name: settings.app_name,
+        logo_url: settings.logo_url || "",
+      },
+    });
+  }
+
+  return NextResponse.json({
+    ok: true,
+    verificationSent: true,
+    resentToUnverified: Boolean(existing && !existing.emailVerified),
+  });
 }

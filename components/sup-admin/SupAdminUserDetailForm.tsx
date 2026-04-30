@@ -5,7 +5,17 @@ import { useState } from "react";
 import Link from "next/link";
 import { format } from "date-fns";
 import { signIn } from "next-auth/react";
-import { ArrowLeft, Calendar, Clock, Layers, Link2, Monitor, ShieldCheck, ShieldOff } from "lucide-react";
+import {
+  ArrowLeft,
+  Calendar,
+  Clock,
+  Layers,
+  Link2,
+  Monitor,
+  ShieldCheck,
+  ShieldOff,
+  Trash2,
+} from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toaster";
@@ -46,6 +56,7 @@ export function SupAdminUserDetailForm({
   const canSetSuperAdmin = actorRole === "SUPER_ADMIN";
   const verified = Boolean(initialUser.emailVerified);
   const [impersonateBusy, setImpersonateBusy] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const joinedAt = format(new Date(initialUser.createdAt), "MMMM d, yyyy · h:mm a");
   const updatedAt = format(new Date(initialUser.updatedAt), "MMMM d, yyyy · h:mm a");
 
@@ -136,6 +147,31 @@ export function SupAdminUserDetailForm({
       }
     } finally {
       setImpersonateBusy(false);
+    }
+  }
+
+  async function onDeleteUser() {
+    const ok = window.confirm(
+      `Permanently delete ${initialUser.email}? This removes their account and timeline data. This cannot be undone.`
+    );
+    if (!ok) return;
+    setDeleteBusy(true);
+    try {
+      const res = await fetch(`/api/sup-admin/users/${initialUser.id}`, { method: "DELETE" });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        toast({
+          title: "Could not delete",
+          description: typeof data.error === "string" ? data.error : "Try again.",
+          variant: "destructive",
+        });
+        return;
+      }
+      toast({ title: "User deleted" });
+      router.push("/sup-admin/users");
+      router.refresh();
+    } finally {
+      setDeleteBusy(false);
     }
   }
 
@@ -358,6 +394,27 @@ export function SupAdminUserDetailForm({
           </form>
         </div>
       </div>
+
+      {!isSelf ?
+        <div className="rounded-2xl border border-red-200 bg-red-50/60 p-6 shadow-sm">
+          <h2 className="mb-1 text-xs font-semibold uppercase tracking-[0.12em] text-red-800">
+            Danger zone
+          </h2>
+          <p className="mb-4 max-w-xl text-sm text-red-900/90">
+            Delete this user permanently. Their timeline entries and assets are removed with the account.
+          </p>
+          <Button
+            type="button"
+            variant="danger"
+            className="!w-auto"
+            disabled={deleteBusy}
+            onClick={() => void onDeleteUser()}
+          >
+            <Trash2 className="mr-2 h-4 w-4 shrink-0" aria-hidden />
+            {deleteBusy ? "Deleting…" : "Delete user"}
+          </Button>
+        </div>
+      : null}
     </div>
   );
 }

@@ -1,10 +1,8 @@
 import { NextResponse } from "next/server";
-import crypto from "crypto";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { sendEmail } from "@/lib/email";
-import { getAppSettings } from "@/lib/settings";
 import { rateLimitAuth, getClientIp } from "@/lib/rate-limit";
+import { rotateVerificationTokenAndEmail } from "@/lib/verification-email";
 
 const bodySchema = z.object({
   email: z.string().email(),
@@ -46,27 +44,7 @@ export async function POST(req: Request) {
     });
   }
 
-  const verifyToken = crypto.randomBytes(32).toString("hex");
-  const base = process.env.NEXTAUTH_URL || "http://localhost:3000";
-  const settings = await getAppSettings();
-
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { verifyToken },
-  });
-
-  const verifyLink = `${base}/api/auth/verify-email?token=${encodeURIComponent(verifyToken)}`;
-
-  await sendEmail({
-    to: email,
-    templateKey: "verify_email",
-    variables: {
-      name: user.name || "",
-      link: verifyLink,
-      app_name: settings.app_name,
-      logo_url: settings.logo_url || "",
-    },
-  });
+  await rotateVerificationTokenAndEmail(user.id);
 
   return NextResponse.json({
     ok: true,

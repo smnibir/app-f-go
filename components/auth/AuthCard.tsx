@@ -82,15 +82,27 @@ export function AuthCard({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
-      const data = await res.json() as { error?: string; code?: string; handoffToken?: string };
+      const data = await res.json() as {
+        error?: string;
+        code?: string;
+        handoffToken?: string;
+        verificationSent?: boolean;
+      };
       if (!res.ok) {
         if (res.status === 403 && data.code === "EMAIL_NOT_VERIFIED") {
           setNeedsVerification(true);
-          toast({
-            title: "Email not verified",
-            description: "Confirm your email or resend the link below.",
-            variant: "destructive",
-          });
+          if (data.verificationSent) {
+            toast({
+              title: "Verification sent",
+              description: "Check your inbox for a new link to verify your account.",
+            });
+          } else {
+            toast({
+              title: "Email not verified",
+              description: "Confirm your email or use resend below.",
+              variant: "destructive",
+            });
+          }
           setSubmitting(null);
           return;
         }
@@ -188,7 +200,11 @@ export function AuthCard({
           confirmPassword: confirmPw,
         }),
       });
-      const data = await res.json();
+      const data = await res.json() as {
+        error?: string;
+        verificationSent?: boolean;
+        resentToUnverified?: boolean;
+      };
       if (!res.ok) {
         const msg = typeof data.error === "string" ? data.error : "Registration failed.";
         toast({ title: "Couldn’t create account", description: msg, variant: "destructive" });
@@ -196,8 +212,11 @@ export function AuthCard({
         return;
       }
       toast({
-        title: "Check your email",
-        description: "We sent a verification link. You can sign in after verifying.",
+        title: data.resentToUnverified ? "Verification sent" : "Check your email",
+        description:
+          data.resentToUnverified ?
+            "We sent another verification link to this address."
+          : "We sent a verification link. You can sign in after verifying.",
       });
       setTab("signin");
       setSubmitting(null);

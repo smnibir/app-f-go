@@ -4,6 +4,7 @@ import { loginSchema } from "@/lib/validations";
 import { prisma } from "@/lib/prisma";
 import { signLoginHandoffToken } from "@/lib/impersonate-token";
 import { rateLimitAuth, getClientIp } from "@/lib/rate-limit";
+import { rotateVerificationTokenAndEmail } from "@/lib/verification-email";
 
 export async function POST(req: Request) {
   const ip = getClientIp(req);
@@ -36,10 +37,12 @@ export async function POST(req: Request) {
     );
   }
   if (!user.emailVerified) {
+    const sent = await rotateVerificationTokenAndEmail(user.id);
     return NextResponse.json(
       {
         error: "Please verify your email before signing in.",
         code: "EMAIL_NOT_VERIFIED",
+        verificationSent: sent,
       },
       { status: 403 }
     );
